@@ -1,0 +1,18 @@
+# MultiHop-RAG, pinned to one revision so every clone builds identical data.
+repo_id: yixuantt/MultiHopRAG
+revision: 71ac0d0bd1f951d2d6b70311f7d2ae404e1ffa82
+corpus_file: corpus.json
+questions_file: MultiHopRAG.json
+
+raw_dir: data/raw
+processed_dir: data/processed
+
+# Frozen splits. Development is used for all tuning; test is touched once, in Stage 12.
+# Dev and test never share a gold evidence sentence (see docs/stages/00-setup.md).
+dev_size: 500
+test_size: 500
+# No single evidence cluster may supply more than this share of a split's answerable questions.
+max_cluster_share: 0.2
+# Questions inside the development split that also get answer-quality metrics (LLM calls).
+answer_subset_size: 150
+seed: 42
