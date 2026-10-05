@@ -10,11 +10,19 @@ readme = "README.md"
 requires-python = ">=3.12"
 # Each stage adds only the dependencies it needs. Exact versions are in requirements.lock.
 dependencies = [
+    "anthropic>=1.0",
     "huggingface_hub>=0.25",
+    "numpy>=2.0",
+    "openai>=2.0",
     "pydantic>=2.9",
+    "python-dotenv>=1.0",
     "pyyaml>=6.0",
+    "streamlit>=1.40",
     "tiktoken>=0.8",
 ]
+
+[project.scripts]
+rag = "ragbasics.cli:main"
 
 [project.optional-dependencies]
 dev = [

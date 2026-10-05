@@ -1,0 +1,20 @@
+# The same pipeline with no API calls: a word-hashing embedder and no LLM.
+# For trying the CLI and the app without keys. Not used for any measurement.
+name: offline
+index_dir: data/index/offline
+
+chunker:
+  name: fixed
+  params: {size: 512}
+
+embedder:
+  name: hashing
+  params: {dimensions: 512}
+
+store:
+  name: numpy
+
+top_k: 5
+
+generator:
+  name: echo

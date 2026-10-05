@@ -36,6 +36,18 @@ class DataConfig(StrictModel):
     seed: int
 
 
+class PipelineConfig(StrictModel):
+    """One pipeline: a component per slot. A stage comparison is a diff of two of these."""
+
+    name: str
+    index_dir: Path
+    chunker: ComponentSpec
+    embedder: ComponentSpec
+    store: ComponentSpec
+    top_k: int = Field(gt=0)
+    generator: ComponentSpec
+
+
 def load_config[T: BaseModel](path: str | Path, model: type[T]) -> T:
     with open(path) as f:
         return model.model_validate(yaml.safe_load(f))

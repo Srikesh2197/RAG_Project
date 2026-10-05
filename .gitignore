@@ -13,3 +13,6 @@ data/
 
 # Per-run outputs; the summary tables in results/ are committed
 runs/
+
+# Local tool settings
+.claude/

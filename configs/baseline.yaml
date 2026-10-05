@@ -1,0 +1,24 @@
+# Stage 1: the naive baseline. Every later result is reported against this config.
+name: baseline
+index_dir: data/index/baseline
+
+# 512 tokens, no overlap, cut wherever the count falls.
+chunker:
+  name: fixed
+  params: {size: 512}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+# Exact search: every chunk is scored against the query.
+store:
+  name: numpy
+
+# Chunks pasted into the prompt, in rank order.
+top_k: 5
+
+# Pinned for every run, so stages stay comparable.
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}
