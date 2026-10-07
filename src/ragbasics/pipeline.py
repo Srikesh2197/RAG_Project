@@ -6,12 +6,15 @@
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 # Importing a component module registers it by name.
 import ragbasics.chunking.fixed
+import ragbasics.chunking.parent_child
+import ragbasics.chunking.recursive
+import ragbasics.chunking.semantic
 import ragbasics.embedding.hashing
 import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
@@ -25,7 +28,7 @@ from ragbasics.context.prompts import (
 )
 from ragbasics.costs import append_ledger, embedding_cost, generation_cost
 from ragbasics.registry import build
-from ragbasics.types import Chunk, Document, Trace
+from ragbasics.types import Candidate, Chunk, Document, Trace
 
 EMBED_BATCH = 100  # chunks per embedding request
 
@@ -42,10 +45,29 @@ class IngestReport:
     embed_tokens: int
     cost_usd: float
     seconds: float
+    chunk_seconds: float = 0.0  # the part of `seconds` spent chunking
+    chunker_tokens: int = 0  # embedding tokens the chunker itself used (semantic)
 
 
 def _build(kind: str, spec: ComponentSpec) -> Any:
     return build(kind, spec.name, **spec.params)
+
+
+def collapse_duplicates(candidates: list[Candidate]) -> list[Candidate]:
+    """Keep the best-ranked candidate for each returned span, and renumber the ranks.
+
+    Flat chunkers never return one span twice, so this changes nothing for them. With
+    parent-child chunking several children share a parent, and the parent's text should
+    reach the prompt once.
+    """
+    seen: set[tuple[str, int, int]] = set()
+    kept: list[Candidate] = []
+    for candidate in candidates:
+        span = (candidate.chunk.doc_id, candidate.chunk.start_char, candidate.chunk.end_char)
+        if span not in seen:
+            seen.add(span)
+            kept.append(replace(candidate, rank=len(kept) + 1))
+    return kept
 
 
 class Pipeline:
@@ -71,6 +93,9 @@ class Pipeline:
         }
 
     def chunk(self, documents: list[Document]) -> list[Chunk]:
+        # A chunker that calls a model (semantic) does it for all documents in one go.
+        if hasattr(self.chunker, "prepare"):
+            self.chunker.prepare(documents)
         return [chunk for document in documents for chunk in self.chunker.chunk(document)]
 
     def ingest(
@@ -86,7 +111,10 @@ class Pipeline:
         started = time.perf_counter()
         indexed = {chunk.doc_id for chunk in self.store.chunks}
         new = [d for d in documents if d.doc_id not in indexed]
+        chunker_tokens_before = getattr(self.chunker, "billed_tokens", 0)
         chunks = self.chunk(new)
+        chunk_seconds = time.perf_counter() - started
+        chunker_tokens = getattr(self.chunker, "billed_tokens", 0) - chunker_tokens_before
 
         tokens = 0
         for i in range(0, len(chunks), EMBED_BATCH):
@@ -101,6 +129,13 @@ class Pipeline:
         cost = embedding_cost(self.embedder.model, tokens)
         if self.ledger and tokens:
             append_ledger(self.ledger, "ingest", self.embedder.model, tokens, 0, cost)
+        if chunker_tokens:
+            chunker_cost = embedding_cost(self.chunker.model, chunker_tokens)
+            cost += chunker_cost
+            if self.ledger:
+                append_ledger(
+                    self.ledger, "chunk", self.chunker.model, chunker_tokens, 0, chunker_cost
+                )
         return IngestReport(
             documents=len(new),
             skipped=len(documents) - len(new),
@@ -108,6 +143,8 @@ class Pipeline:
             embed_tokens=tokens,
             cost_usd=cost,
             seconds=time.perf_counter() - started,
+            chunk_seconds=chunk_seconds,
+            chunker_tokens=chunker_tokens,
         )
 
     def load(self) -> bool:
@@ -137,7 +174,9 @@ class Pipeline:
         t0 = time.perf_counter()
         embedded = self.embedder.embed([question])
         t1 = time.perf_counter()
-        trace.candidates = self.store.search(embedded.vectors[0], k or self.cfg.top_k)
+        k = k or self.cfg.top_k
+        found = self.store.search(embedded.vectors[0], k * self.cfg.overfetch)
+        trace.candidates = collapse_duplicates(found)[:k]
         t2 = time.perf_counter()
         trace.timings = {"embed_query": t1 - t0, "search": t2 - t1}
         trace.usage = {"embed_tokens": embedded.tokens}

@@ -268,6 +268,7 @@ def test_report_tables_csv_and_readme(setup):
     table = report.results_markdown(runs)
     assert "**Retrieval** (4 development questions with gold evidence)" in table
     assert "| tiny-gold |" in table and "| guesser |" in table
+    assert "recall in 2,000 tok vs baseline" in table
 
     report.write_csv(runs, tmp_path / "results.csv")
     with open(tmp_path / "results.csv") as f:
@@ -292,3 +293,30 @@ def test_compare_is_the_paired_difference_on_shared_questions(setup):
     mine = sum(r["scores"]["correct"] for r in a["rows"] if "correct" in r["scores"])
     theirs = sum(r["scores"]["correct"] for r in b["rows"] if "correct" in r["scores"])
     assert diff.mean == pytest.approx((mine - theirs) / 4)
+
+
+def test_retrieval_table_shows_the_paired_difference_from_the_baseline(setup, monkeypatch):
+    run, tmp_path, pipeline_cfg, eval_cfg = setup
+    run(answers=False)
+    # The same pipeline searching one chunk deep: a second run to compare on the same questions.
+    shallow = eval_cfg.model_copy(update={"depth": 1})
+    run_eval(pipeline_cfg.model_copy(update={"name": "shallow"}), shallow, answers=False,
+             runs_dir=tmp_path / "runs", log=lambda _: None)
+    monkeypatch.setattr(report, "BASELINE_RUN", "tiny")
+    runs = report.load_runs(tmp_path / "runs")
+    by_id = {r["run_id"]: r for r in runs}
+    diff = report.compare(by_id["shallow"], by_id["tiny"], "recall@15tok")
+    assert diff.n == 4 and diff.mean <= 0
+    monkeypatch.setattr(report, "PAIRED_RETRIEVAL", [("recall@15tok", "recall vs baseline")])
+    lines = report.results_markdown(runs).splitlines()
+    tiny = next(line for line in lines if line.startswith("| tiny |"))
+    other = next(line for line in lines if line.startswith("| shallow |"))
+    assert tiny.endswith("|  |")  # the baseline has no difference from itself
+    assert f"{100 * diff.mean:+.1f} (" in other
+
+
+def test_retrieval_only_does_not_overwrite_an_answer_run(setup):
+    run, *_ = setup
+    run()
+    with pytest.raises(ValueError, match="would overwrite"):
+        run(answers=False)

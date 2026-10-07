@@ -1,0 +1,23 @@
+# Stage 3: search 128-token children, return their 256-token parent.
+# Differs from configs/baseline.yaml in the chunker only and in overfetch.
+name: chunk-parent-child-128-256
+index_dir: data/index/chunk-parent-child-128-256
+
+chunker:
+  name: parent_child
+  params: {parent_size: 256, child_size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+top_k: 5
+# Several children share a parent. Search 4 times deeper, then keep each parent once.
+overfetch: 4
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

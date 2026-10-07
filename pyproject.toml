@@ -31,6 +31,11 @@ dev = [
     "ranx>=0.3.20",
     "ruff>=0.6",
 ]
+# Library versions of hand-written parts, used only by framework_equivalents/ and its
+# parity tests. Nothing in src/ imports them.
+frameworks = [
+    "langchain-text-splitters>=1.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -117,10 +117,15 @@ def score_retrieval(
 
 def count_relevant(index_chunks: list[Chunk], questions: list[Question]) -> dict[str, int]:
     """For each question, how many chunks of the whole index overlap its gold spans.
-    nDCG needs it to know the best ranking that was possible."""
+    nDCG needs it to know the best ranking that was possible. Chunks that return the
+    same span (children of one parent) count once, as they do in a ranked list."""
     by_doc: dict[str, list[Chunk]] = {}
+    seen: set[tuple[str, int, int]] = set()
     for chunk in index_chunks:
-        by_doc.setdefault(chunk.doc_id, []).append(chunk)
+        span = (chunk.doc_id, chunk.start_char, chunk.end_char)
+        if span not in seen:
+            seen.add(span)
+            by_doc.setdefault(chunk.doc_id, []).append(chunk)
     return {
         q.question_id: sum(
             any(rm.overlaps(chunk, span) for span in q.evidence)
@@ -190,6 +195,14 @@ def run_eval(
     if eval_cfg.questions.name.startswith("questions_test") and not allow_test:
         raise ValueError(
             f"{eval_cfg.questions} is held-out test data. It is used once, in Stage 12."
+        )
+
+    previous = runs_dir / run_id(pipeline_cfg.name, mode, sample) / "metrics.json"
+    has_answers = previous.exists() and "correct" in json.loads(previous.read_text())["metrics"]
+    if not answers and has_answers:
+        raise ValueError(
+            f"{previous.parent} holds an answer-quality run. A retrieval-only run has the "
+            "same run id and would overwrite it."
         )
 
     questions = read_questions(eval_cfg.questions)

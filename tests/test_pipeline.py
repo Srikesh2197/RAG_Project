@@ -40,6 +40,10 @@ def test_repo_configs_load_and_build():
         cfg = load_config(REPO_ROOT / "configs" / f"{name}.yaml", PipelineConfig)
         Pipeline(cfg)  # builds every component; needs no API key
     assert cfg.top_k == 5
+    for path in sorted((REPO_ROOT / "configs" / "stage03_chunking").glob("*.yaml")):
+        cfg = load_config(path, PipelineConfig)
+        Pipeline(cfg)
+        assert cfg.name == f"chunk-{path.stem}" and cfg.name.startswith(cfg.index_dir.name)
 
 
 def test_ingest_then_ask_returns_a_full_trace(tmp_path):
@@ -182,3 +186,24 @@ def test_anthropic_generator_sends_the_prompt_and_reads_only_text_blocks():
     assert client.request["system"] == "system text"
     assert client.request["messages"] == [{"role": "user", "content": "user text"}]
     assert "temperature" not in client.request
+
+
+def test_parent_child_retrieval_returns_each_parent_once(tmp_path):
+    text = ("The harbour ferry was delayed by fog. The ferry left at noon. " * 4
+            + "\n\nQuarterly revenue at the bakery rose. The bakery sold more bread. " * 4)
+    cfg = offline_config(
+        tmp_path,
+        chunker={"name": "parent_child", "params": {"parent_size": 64, "child_size": 16}},
+        overfetch=4,
+    )
+    pipeline = Pipeline(cfg)
+    pipeline.ingest([Document("doc_p", text)])
+    parents = {(c.start_char, c.end_char) for c in pipeline.store.chunks}
+    assert len(pipeline.store) > len(parents) > 1  # several children per parent
+
+    trace = pipeline.retrieve("Why was the harbour ferry delayed?", k=len(parents))
+    spans = [(c.chunk.start_char, c.chunk.end_char) for c in trace.candidates]
+    assert sorted(spans) == sorted(parents)  # every parent, none twice
+    assert [c.rank for c in trace.candidates] == list(range(1, len(parents) + 1))
+    top = trace.candidates[0].chunk
+    assert "ferry" in top.text and top.text == text[top.start_char : top.end_char]

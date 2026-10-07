@@ -1,0 +1,22 @@
+# Stage 3: recursive splitting at 128 tokens.
+# The answer-quality run for recursive-128. Uses the index built by recursive-128.yaml.
+name: chunk-recursive-128-k25
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+# 25 chunks of about 92 tokens: the same amount of text as the baseline's 5 of 512.
+top_k: 25
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

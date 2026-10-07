@@ -1,0 +1,21 @@
+# Stage 3: whole sentences packed up to 512 tokens.
+# Differs from configs/baseline.yaml in the chunker only.
+name: chunk-sentence-512
+index_dir: data/index/chunk-sentence-512
+
+chunker:
+  name: sentence
+  params: {size: 512}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+top_k: 5
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

@@ -1,0 +1,21 @@
+# Stage 3: the baseline with 20% overlap (102 of 512 tokens repeated).
+# Differs from configs/baseline.yaml in the chunker only.
+name: chunk-fixed-512-overlap-20
+index_dir: data/index/chunk-fixed-512-overlap-20
+
+chunker:
+  name: fixed
+  params: {size: 512, overlap: 102}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+top_k: 5
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

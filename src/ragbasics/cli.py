@@ -1,6 +1,7 @@
 """Command line: rag ingest | ask | check | eval | report | compare."""
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -55,15 +56,36 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     documents = read_documents(Path(args.documents))
 
     indexed = {chunk.doc_id for chunk in pipeline.store.chunks}
-    chunks = pipeline.chunk([d for d in documents if d.doc_id not in indexed])
+    new = [d for d in documents if d.doc_id not in indexed]
     encoding = tiktoken.get_encoding("cl100k_base")
-    tokens = sum(len(encoding.encode(c.text_to_embed, disallowed_special=())) for c in chunks)
+
+    def count(texts: list[str]) -> int:
+        return sum(len(encoding.encode(text, disallowed_special=())) for text in texts)
+
+    # A chunker that embeds sentences (semantic) spends before any chunk exists, so its
+    # cost is printed first.
+    chunker = pipeline.chunker
+    if hasattr(chunker, "texts_to_embed"):
+        tokens = count(chunker.texts_to_embed(new))
+        print(
+            f"The {pipeline.cfg.chunker.name} chunker embeds sentences first: about "
+            f"{tokens:,} tokens, about ${embedding_cost(chunker.model, tokens):.4f} with "
+            f"{chunker.model} (0 if cached)."
+        )
+        if args.estimate:
+            sys.exit("Estimate only: the chunk embedding costs about as much as one index "
+                     "build of the same text. Nothing was embedded.")
+
+    chunks = pipeline.chunk(new)
+    tokens = count([c.text_to_embed for c in chunks])
     estimate = embedding_cost(pipeline.embedder.model, tokens)
     print(
         f"{len(documents)} documents, {len(indexed)} already indexed. "
         f"To embed: {len(chunks)} chunks, about {tokens:,} tokens, "
         f"about ${estimate:.4f} with {pipeline.embedder.model}."
     )
+    if args.estimate:
+        sys.exit("Estimate only: nothing was embedded.")
 
     def progress(done: int, total: int) -> None:
         print(f"\r  embedded {done}/{total} chunks", end="", flush=True)
@@ -74,6 +96,18 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         f"{report.seconds:.1f} s. Billed {report.embed_tokens:,} tokens, ${report.cost_usd:.4f}. "
         f"Index: {pipeline.index_dir} ({len(pipeline.store)} chunks)."
     )
+    if report.documents:
+        # Kept next to the index so a stage write-up can report indexing time and cost.
+        stats = {
+            "documents": report.documents,
+            "chunks": report.chunks,
+            "embed_tokens": report.embed_tokens,
+            "chunker_tokens": report.chunker_tokens,
+            "cost_usd": round(report.cost_usd, 6),
+            "seconds": round(report.seconds, 1),
+            "chunk_seconds": round(report.chunk_seconds, 1),
+        }
+        (pipeline.index_dir / "ingest.json").write_text(json.dumps(stats, indent=2) + "\n")
 
 
 def cmd_ask(args: argparse.Namespace) -> None:
@@ -165,6 +199,7 @@ def main() -> None:
     ingest = commands.add_parser("ingest", help="chunk, embed and index documents")
     ingest.add_argument("--config", default=DEFAULT_CONFIG)
     ingest.add_argument("--documents", default=DEFAULT_DOCUMENTS)
+    ingest.add_argument("--estimate", action="store_true", help="print the cost and stop")
     ingest.set_defaults(run=cmd_ingest)
 
     ask = commands.add_parser("ask", help="answer one question from the index")

@@ -45,6 +45,9 @@ class PipelineConfig(StrictModel):
     embedder: ComponentSpec
     store: ComponentSpec
     top_k: int = Field(gt=0)
+    # Search this many times deeper than asked, before chunks that return the same text
+    # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.
+    overfetch: int = Field(default=1, gt=0)
     generator: ComponentSpec
 
 

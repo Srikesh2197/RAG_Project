@@ -13,8 +13,8 @@ Core mechanics are written from scratch first. Library equivalents are shown nex
 | 0 | Setup and data | done | [00-setup.md](docs/stages/00-setup.md) |
 | 1 | Naive baseline and Streamlit app | done | [01-naive-baseline.md](docs/stages/01-naive-baseline.md) |
 | 2 | Evaluation harness | done; human check of the judge deferred | [02-evaluation-harness.md](docs/stages/02-evaluation-harness.md) |
-| 3 | Chunking | next | |
-| 4 | Embedding models | | |
+| 3 | Chunking | done | [03-chunking.md](docs/stages/03-chunking.md) |
+| 4 | Embedding models | next | |
 | 5 | Sparse and hybrid retrieval | | |
 | 6 | Reranking | | |
 | 7 | Query transformation | | |
@@ -58,6 +58,15 @@ To score a pipeline on the development questions:
 .venv/bin/rag report                  # rebuild results/results.csv and the table below
 ```
 
+To try another chunker (Stage 3), each config builds its own index:
+
+```bash
+.venv/bin/rag ingest --config configs/stage03_chunking/recursive-128.yaml --estimate
+.venv/bin/rag ingest --config configs/stage03_chunking/recursive-128.yaml
+.venv/bin/rag eval --config configs/stage03_chunking/recursive-128.yaml --retrieval-only
+.venv/bin/python scripts/stage03_sweep.py   # the chunking table, against the baseline
+```
+
 `make app-offline` runs the same app with no keys, using a word-hashing embedder and no LLM. It shows the mechanics, not useful answers.
 
 ## Results
@@ -67,9 +76,22 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 
 **Retrieval** (441 development questions with gold evidence)
 
-| run | recall@5 | full support@5 | MRR@10 | nDCG@10 | recall in 2,000 tok | precision in 2,000 tok |
-|---|---|---|---|---|---|---|
-| baseline | 48.2 (41–57) | 21.5 (15–32) | 59.0 (53–66) | 49.0 (43–56) | 44.8 (38–53) | 1.7 (1.5–1.9) |
+| run | recall@5 | full support@5 | MRR@10 | nDCG@10 | recall in 2,000 tok | precision in 2,000 tok | recall in 2,000 tok vs baseline | precision in 2,000 tok vs baseline |
+|---|---|---|---|---|---|---|---|---|
+| baseline | 48.2 (41–57) | 21.5 (15–32) | 59.0 (53–66) | 49.0 (43–56) | 44.8 (38–53) | 1.7 (1.5–1.9) |  |  |
+| chunk-sentence-512 | 47.7 (41–56) | 20.6 (14–30) | 57.6 (53–64) | 48.8 (43–56) | 44.4 (38–53) | 1.7 (1.5–2.0) | -0.4 (-2.7 to +1.6) | +0.03 (-0.06 to +0.12) |
+| chunk-recursive-512 | 44.8 (39–52) | 17.5 (12–25) | 54.1 (50–60) | 46.4 (41–53) | 42.4 (37–50) | 1.6 (1.4–1.8) | -2.4 (-5.2 to -0.2) | -0.06 (-0.17 to +0.04) |
+| chunk-recursive-128 | 35.2 (30–42) | 12.0 (8–18) | 45.1 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) |
+| chunk-recursive-256 | 39.1 (33–47) | 15.2 (10–23) | 46.4 (42–53) | 39.9 (35–47) | 51.2 (44–60) | 1.9 (1.7–2.2) | +6.4 (+2.7 to +10.9) | +0.24 (+0.09 to +0.41) |
+| chunk-recursive-1024 | 53.6 (46–61) | 25.2 (18–35) | 61.6 (56–68) | 54.9 (49–61) | 36.7 (30–44) | 1.4 (1.3–1.6) | -8.1 (-13.2 to -4.1) | -0.28 (-0.45 to -0.14) |
+| chunk-fixed-128 | 38.2 (33–45) | 13.6 (9–21) | 47.7 (43–54) | 37.0 (33–43) | 60.9 (55–68) | 2.2 (2.0–2.4) | +16.1 (+12.3 to +19.3) | +0.50 (+0.31 to +0.66) |
+| chunk-fixed-512-overlap-10 | 46.3 (40–56) | 20.6 (14–30) | 52.2 (47–59) | 44.3 (38–52) | 42.0 (36–51) | 1.6 (1.4–1.9) | -2.8 (-7.3 to +0.7) | -0.07 (-0.24 to +0.09) |
+| chunk-fixed-512-overlap-20 | 44.0 (38–52) | 17.7 (12–27) | 51.6 (46–58) | 43.8 (39–51) | 38.8 (33–47) | 1.5 (1.3–1.7) | -6.0 (-10.1 to -2.6) | -0.20 (-0.36 to -0.05) |
+| chunk-parent-child-128-512 | 50.7 (45–58) | 22.9 (17–32) | 59.9 (56–66) | 52.6 (48–60) | 45.7 (40–54) | 1.8 (1.6–2.0) | +0.9 (-3.2 to +5.0) | +0.10 (-0.07 to +0.26) |
+| chunk-recursive-64 | 37.8 (33–44) | 13.6 (9–20) | 47.9 (42–55) | 38.9 (35–45) | 73.2 (69–80) | 3.0 (2.6–3.4) | +28.4 (+23.8 to +32.7) | +1.27 (+0.85 to +1.82) |
+| chunk-parent-child-128-256 | 42.3 (36–50) | 16.1 (11–24) | 52.0 (46–60) | 44.0 (39–51) | 55.0 (49–63) | 2.1 (1.9–2.3) | +10.2 (+5.3 to +14.4) | +0.43 (+0.23 to +0.62) |
+| chunk-semantic-128 | 38.8 (33–46) | 15.0 (10–21) | 48.3 (43–55) | 39.9 (35–46) | 63.4 (57–71) | 2.4 (2.3–2.6) | +18.6 (+14.5 to +22.4) | +0.75 (+0.52 to +0.92) |
+| chunk-recursive-128-k25 | 35.2 (30–42) | 12.0 (8–18) | 45.2 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) |
 
 **Answers**
 
@@ -80,6 +102,7 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 | baseline-gold | 150 | 46.0 (36–55) | 38.6 (25–49) | 100.0 (100–100) | 61.4 (51–75) | 58.8 (41–75) | -5.3 (-14 to +2) | $0.17 |
 | baseline-closed_book | 150 | 47.3 (36–56) | 41.7 (28–52) | 88.9 (72–100) | 56.1 (46–69) |  | -4.0 (-14 to +4) | $0.14 |
 | guesser | 150 | 52.7 (40–67) | 46.2 (32–63) | 100.0 (100–100) | 0.0 (0.0–0.0) |  | +1.3 (-13 to +17) |  |
+| chunk-recursive-128-k25 | 150 | 56.0 (47–64) | 50.0 (39–59) | 100.0 (100–100) | 47.0 (39–58) | 68.6 (57–78) | +4.7 (-2 to +11) | $1.43 |
 
 **Answer correctness by question type**
 
@@ -90,6 +113,7 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 | baseline-gold | 28.6 (18–40) | 96.9 (86–100) | 5.4 (0–11) | 100.0 (100–100) |
 | baseline-closed_book | 15.9 (7–26) | 96.9 (86–100) | 37.8 (20–55) | 88.9 (72–100) |
 | guesser | 54.0 (42–66) | 34.4 (0–72) | 43.2 (32–59) | 100.0 (100–100) |
+| chunk-recursive-128-k25 | 33.3 (22–47) | 100.0 (100–100) | 35.1 (20–53) | 100.0 (100–100) |
 <!-- results:end -->
 
 ## Data

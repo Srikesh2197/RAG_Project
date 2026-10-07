@@ -7,7 +7,7 @@ BIN := $(VENV)/bin
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/python -m pip install --upgrade pip
-	$(BIN)/python -m pip install -e ".[dev]"
+	$(BIN)/python -m pip install -e ".[dev,frameworks]"
 
 data:
 	$(BIN)/python scripts/download_data.py --config configs/data.yaml

@@ -46,3 +46,12 @@ def test_chunks_carry_document_metadata_and_embed_their_own_text():
     chunk = FixedChunker(size=3).chunk(SEVEN)[0]
     assert chunk.metadata == {"source": "Test"}
     assert chunk.text_to_embed == chunk.text
+
+
+def test_overlap_repeats_the_tail_of_each_chunk():
+    chunks = FixedChunker(size=3, overlap=1).chunk(SEVEN)
+    assert [c.text for c in chunks] == ["one two three", " three four five", " five six seven"]
+    for chunk in chunks:
+        assert SEVEN.text[chunk.start_char : chunk.end_char] == chunk.text
+    with pytest.raises(ValueError):
+        FixedChunker(size=3, overlap=3)

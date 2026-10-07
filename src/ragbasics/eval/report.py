@@ -23,6 +23,12 @@ RETRIEVAL_COLUMNS = [
     ("recall@2000tok", "recall in 2,000 tok"),
     ("precision@2000tok", "precision in 2,000 tok"),
 ]
+# Retrieval metrics also shown as a paired difference against the baseline. These two are
+# the ones that stay comparable when the chunk size changes.
+PAIRED_RETRIEVAL = [
+    ("recall@2000tok", "recall in 2,000 tok vs baseline"),
+    ("precision@2000tok", "precision in 2,000 tok vs baseline"),
+]
 ANSWER_COLUMNS = [
     ("correct", "correct"),
     ("correct_answerable", "correct, answerable"),
@@ -88,12 +94,18 @@ def _pct(metric: dict[str, Any] | None) -> str:
     return f"{100 * metric['mean']:.1f} ({low}–{high})"
 
 
-def _signed(interval: Interval) -> str:
+def _signed(interval: Interval, digits: int = 0) -> str:
     if interval.n == 0:
         return ""
-    return (
-        f"{100 * interval.mean:+.1f} ({100 * interval.low:+.0f} to {100 * interval.high:+.0f})"
-    )
+    low, high = (f"{100 * side:+.{digits}f}" for side in (interval.low, interval.high))
+    return f"{100 * interval.mean:+.{max(digits, 1)}f} ({low} to {high})"
+
+
+def _versus(run: dict[str, Any], baseline: dict[str, Any] | None, metric: str, digits: int) -> str:
+    """Paired difference from the baseline run, or blank for the baseline itself."""
+    if not baseline or run is baseline or metric not in baseline["metrics"]:
+        return ""
+    return _signed(compare(run, baseline, metric), digits)
 
 
 def _markdown(header: list[str], rows: list[list[str]]) -> str:
@@ -118,9 +130,21 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
         parts += [
             f"**Retrieval** ({n} development questions with gold evidence)",
             _markdown(
-                ["run", *[heading for _, heading in RETRIEVAL_COLUMNS]],
                 [
-                    [run["run_id"], *[_pct(run["metrics"].get(k)) for k, _ in RETRIEVAL_COLUMNS]]
+                    "run",
+                    *[heading for _, heading in RETRIEVAL_COLUMNS],
+                    *[heading for _, heading in PAIRED_RETRIEVAL],
+                ],
+                [
+                    [
+                        run["run_id"],
+                        *[_pct(run["metrics"].get(k)) for k, _ in RETRIEVAL_COLUMNS],
+                        # Precision is a few percent, so its difference needs two decimals.
+                        *[
+                            _versus(run, baseline, k, 2 if k.startswith("precision") else 1)
+                            for k, _ in PAIRED_RETRIEVAL
+                        ],
+                    ]
                     for run in retrieval
                 ],
             ),
@@ -128,9 +152,7 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
     if answered:
         rows = []
         for run in answered:
-            delta = ""
-            if baseline and run is not baseline and "correct" in baseline["metrics"]:
-                delta = _signed(compare(run, baseline, "correct"))
+            delta = _versus(run, baseline, "correct", 0)
             cost = run["cost_usd"]["list_price"]
             rows.append(
                 [

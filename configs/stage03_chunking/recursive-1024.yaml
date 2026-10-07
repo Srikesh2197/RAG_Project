@@ -1,0 +1,21 @@
+# Stage 3: recursive splitting at 1024 tokens.
+# Differs from configs/baseline.yaml in the chunker only.
+name: chunk-recursive-1024
+index_dir: data/index/chunk-recursive-1024
+
+chunker:
+  name: recursive
+  params: {size: 1024}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+top_k: 5
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

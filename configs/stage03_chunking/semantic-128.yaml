@@ -1,0 +1,27 @@
+# Stage 3: cut where neighbouring sentences are least similar, capped at 128 tokens.
+# Differs from configs/baseline.yaml in the chunker only.
+name: chunk-semantic-128
+index_dir: data/index/chunk-semantic-128
+
+chunker:
+  name: semantic
+  params:
+    embedder: {name: openai, params: {model: text-embedding-3-small, batch_size: 500}}
+    # Cut at the sentence gaps above this percentile of the article's distances.
+    percentile: 90
+    max_size: 128
+    window: 1
+    cache_dir: data/cache/sentence_vectors
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+top_k: 5
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

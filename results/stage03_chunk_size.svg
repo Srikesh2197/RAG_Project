@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 380" font-family="sans-serif" font-size="12">
+<rect width="640" height="380" fill="white"/>
+<text x="60" y="18" font-size="14">Evidence recall within 2,000 retrieved tokens, by chunk size (recursive chunker)</text>
+<line x1="60" y1="320.0" x2="610" y2="320.0" stroke="#ddd"/>
+<text x="52" y="324.0" text-anchor="end">20%</text>
+<line x1="60" y1="271.6666666666667" x2="610" y2="271.6666666666667" stroke="#ddd"/>
+<text x="52" y="275.6666666666667" text-anchor="end">30%</text>
+<line x1="60" y1="223.33333333333331" x2="610" y2="223.33333333333331" stroke="#ddd"/>
+<text x="52" y="227.33333333333331" text-anchor="end">40%</text>
+<line x1="60" y1="175.0" x2="610" y2="175.0" stroke="#ddd"/>
+<text x="52" y="179.0" text-anchor="end">50%</text>
+<line x1="60" y1="126.66666666666666" x2="610" y2="126.66666666666666" stroke="#ddd"/>
+<text x="52" y="130.66666666666666" text-anchor="end">60%</text>
+<line x1="60" y1="78.33333333333334" x2="610" y2="78.33333333333334" stroke="#ddd"/>
+<text x="52" y="82.33333333333334" text-anchor="end">70%</text>
+<line x1="60" y1="30.0" x2="610" y2="30.0" stroke="#ddd"/>
+<text x="52" y="34.0" text-anchor="end">80%</text>
+<line x1="60" y1="200.11652809271854" x2="610" y2="200.11652809271854" stroke="#888" stroke-dasharray="5 4"/>
+<text x="610" y="194.11652809271854" text-anchor="end" fill="#555">baseline: fixed 512, 44.8%</text>
+<polyline points="60.0,62.7 197.5,108.1 335.0,169.2 472.5,211.7 610.0,239.4" fill="none" stroke="#1f5fa8" stroke-width="2"/>
+<line x1="60.0" y1="85.3" x2="60.0" y2="29.7" stroke="#1f5fa8"/>
+<circle cx="60.0" cy="62.7" r="4" fill="#1f5fa8"/>
+<text x="68.0" y="54.7">73.2</text>
+<text x="60.0" y="338" text-anchor="middle">64</text>
+<line x1="197.5" y1="133.8" x2="197.5" y2="73.6" stroke="#1f5fa8"/>
+<circle cx="197.5" cy="108.1" r="4" fill="#1f5fa8"/>
+<text x="205.5" y="100.1">63.8</text>
+<text x="197.5" y="338" text-anchor="middle">128</text>
+<line x1="335.0" y1="201.9" x2="335.0" y2="126.8" stroke="#1f5fa8"/>
+<circle cx="335.0" cy="169.2" r="4" fill="#1f5fa8"/>
+<text x="343.0" y="161.2">51.2</text>
+<text x="335.0" y="338" text-anchor="middle">256</text>
+<line x1="472.5" y1="240.1" x2="472.5" y2="175.9" stroke="#1f5fa8"/>
+<circle cx="472.5" cy="211.7" r="4" fill="#1f5fa8"/>
+<text x="480.5" y="203.7">42.4</text>
+<text x="472.5" y="338" text-anchor="middle">512</text>
+<line x1="610.0" y1="269.4" x2="610.0" y2="205.6" stroke="#1f5fa8"/>
+<circle cx="610.0" cy="239.4" r="4" fill="#1f5fa8"/>
+<text x="618.0" y="231.4">36.7</text>
+<text x="610.0" y="338" text-anchor="middle">1024</text>
+<text x="335.0" y="360" text-anchor="middle">chunk size in tokens; bars are 95% intervals over evidence clusters</text>
+</svg>
