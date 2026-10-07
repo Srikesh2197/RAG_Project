@@ -17,7 +17,12 @@ import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
 import ragbasics.index.numpy_store  # noqa: F401
 from ragbasics.config import ComponentSpec, PipelineConfig
-from ragbasics.context.prompts import SYSTEM_PROMPT, build_user_prompt
+from ragbasics.context.prompts import (
+    CLOSED_BOOK_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    build_closed_book_prompt,
+    build_user_prompt,
+)
 from ragbasics.costs import append_ledger, embedding_cost, generation_cost
 from ragbasics.registry import build
 from ragbasics.types import Chunk, Document, Trace
@@ -120,43 +125,65 @@ class Pipeline:
 
     # --- Query time ------------------------------------------------------------------
 
-    def ask(self, question: str) -> Trace:
+    def retrieve(self, question: str, k: int | None = None) -> Trace:
+        """Embed the question and search. `k` defaults to the config's `top_k`; the
+        evaluator asks for more, to score ranks below the ones that reach the prompt."""
         if len(self.store) == 0:
             raise ValueError("The index is empty. Ingest documents first.")
         trace = Trace(
             question=question,
             models={"embedder": self.embedder.model, "generator": self.generator.model},
         )
-
         t0 = time.perf_counter()
         embedded = self.embedder.embed([question])
         t1 = time.perf_counter()
-        trace.candidates = self.store.search(embedded.vectors[0], self.cfg.top_k)
+        trace.candidates = self.store.search(embedded.vectors[0], k or self.cfg.top_k)
         t2 = time.perf_counter()
+        trace.timings = {"embed_query": t1 - t0, "search": t2 - t1}
+        trace.usage = {"embed_tokens": embedded.tokens}
+        trace.cost_usd = embedding_cost(self.embedder.model, embedded.tokens)
+        return trace
 
-        trace.system_prompt = SYSTEM_PROMPT
-        trace.user_prompt = build_user_prompt(question, [c.chunk for c in trace.candidates])
+    def generate(self, trace: Trace, context: list[Chunk] | None) -> Trace:
+        """Build the prompt from `context` and generate the answer, filling in `trace`.
+
+        `context=None` asks the question closed-book, with no passages at all.
+        """
+        if context is None:
+            trace.context = []
+            trace.system_prompt = CLOSED_BOOK_SYSTEM_PROMPT
+            trace.user_prompt = build_closed_book_prompt(trace.question)
+        else:
+            trace.context = context
+            trace.system_prompt = SYSTEM_PROMPT
+            trace.user_prompt = build_user_prompt(trace.question, context)
+
+        t0 = time.perf_counter()
         generation = self.generator.generate(trace.system_prompt, trace.user_prompt)
-        t3 = time.perf_counter()
+        trace.timings["generate"] = time.perf_counter() - t0
 
         trace.answer = generation.text
         trace.stop_reason = generation.stop_reason
-        trace.timings = {"embed_query": t1 - t0, "search": t2 - t1, "generate": t3 - t2}
-        trace.usage = {
-            "embed_tokens": embedded.tokens,
+        trace.cached = generation.cached
+        trace.usage |= {
             "input_tokens": generation.input_tokens,
             "output_tokens": generation.output_tokens,
         }
-        trace.cost_usd = embedding_cost(self.embedder.model, embedded.tokens) + generation_cost(
+        trace.cost_usd += generation_cost(
             self.generator.model, generation.input_tokens, generation.output_tokens
         )
+        return trace
+
+    def ask(self, question: str) -> Trace:
+        trace = self.retrieve(question)
+        trace = self.generate(trace, [c.chunk for c in trace.candidates])
         if self.ledger and trace.cost_usd:
             append_ledger(
                 self.ledger,
                 "ask",
                 self.generator.model,
-                generation.input_tokens,
-                generation.output_tokens,
+                trace.usage["input_tokens"],
+                trace.usage["output_tokens"],
                 trace.cost_usd,
             )
         return trace

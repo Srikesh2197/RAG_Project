@@ -1,4 +1,4 @@
-"""Command line: rag ingest | ask | check."""
+"""Command line: rag ingest | ask | check | eval | report | compare."""
 
 import argparse
 import os
@@ -8,15 +8,21 @@ from pathlib import Path
 import tiktoken
 from dotenv import load_dotenv
 
-from ragbasics.config import PipelineConfig, load_config
+from ragbasics.config import EvalConfig, PipelineConfig, load_config
 from ragbasics.costs import embedding_cost
+from ragbasics.eval import report
 from ragbasics.eval.dataset import read_documents
+from ragbasics.eval.runner import MODES, ConfirmationNeeded, EstimateOnly, run_eval
 from ragbasics.pipeline import Pipeline
 from ragbasics.types import Trace
 
 DEFAULT_CONFIG = "configs/baseline.yaml"
 DEFAULT_DOCUMENTS = "data/processed/documents.jsonl"
-LEDGER = Path("runs/cost_ledger.csv")
+DEFAULT_EVAL_CONFIG = "configs/eval.yaml"
+RUNS = Path("runs")
+LEDGER = RUNS / "cost_ledger.csv"
+RESULTS_CSV = Path("results/results.csv")
+README = Path("README.md")
 
 
 def source_label(metadata: dict) -> str:
@@ -93,7 +99,7 @@ def cmd_check(args: argparse.Namespace) -> None:
         ids = sorted(model.id for model in client.models.list())
         embedder = cfg.embedder.params.get("model", "")
         print(f"OpenAI embedder '{embedder}': {'found' if embedder in ids else 'NOT FOUND'}")
-        # The judge (Stage 2) will be picked from these.
+        # The judge (configs/eval.yaml) is picked from these.
         print("OpenAI gpt models:", ", ".join(i for i in ids if i.startswith("gpt")))
 
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -105,6 +111,50 @@ def cmd_check(args: argparse.Namespace) -> None:
             print(f"Anthropic generator '{generator}': found ({model.display_name})")
         except anthropic.NotFoundError:
             print(f"Anthropic generator '{generator}': NOT FOUND")
+
+
+def cmd_eval(args: argparse.Namespace) -> None:
+    try:
+        run_dir = run_eval(
+            load_config(args.config, PipelineConfig),
+            load_config(args.eval_config, EvalConfig),
+            mode=args.mode,
+            sample=args.sample,
+            answers=not args.retrieval_only,
+            confirmed=args.yes,
+            estimate_only=args.estimate,
+            runs_dir=RUNS,
+            ledger=LEDGER,
+        )
+    except (ConfirmationNeeded, EstimateOnly) as stop:
+        sys.exit(str(stop))
+    print(report.results_markdown([report.load_run(run_dir)]))
+
+
+def cmd_report(args: argparse.Namespace) -> None:
+    runs = report.load_runs(RUNS)
+    if not runs:
+        sys.exit(f"No runs in {RUNS}/. Run `rag eval` first.")
+    table = report.results_markdown(runs)
+    report.write_csv(runs, RESULTS_CSV)
+    in_readme = report.update_readme(README, table)
+    print(table)
+    print(f"\nWrote {RESULTS_CSV}" + (f" and the table in {README}." if in_readme else "."))
+
+
+def cmd_compare(args: argparse.Namespace) -> None:
+    """Paired difference between two runs, metric by metric."""
+    a, b = report.load_run(RUNS / args.run_a), report.load_run(RUNS / args.run_b)
+    print(f"{args.run_a} minus {args.run_b}, percentage points, 95% interval over clusters")
+    for metric in a["metrics"]:
+        if metric not in b["metrics"]:
+            continue
+        diff = report.compare(a, b, metric)
+        changed, shared = report.flips(a, b, metric)
+        print(
+            f"  {metric:32s} {100 * diff.mean:+6.1f}  ({100 * diff.low:+.1f} to "
+            f"{100 * diff.high:+.1f})   {changed} of {shared} questions differ"
+        )
 
 
 def main() -> None:
@@ -126,6 +176,24 @@ def main() -> None:
     check = commands.add_parser("check", help="check API keys and model ids")
     check.add_argument("--config", default=DEFAULT_CONFIG)
     check.set_defaults(run=cmd_check)
+
+    evaluate = commands.add_parser("eval", help="score a pipeline on the development questions")
+    evaluate.add_argument("--config", default=DEFAULT_CONFIG)
+    evaluate.add_argument("--eval-config", default=DEFAULT_EVAL_CONFIG)
+    evaluate.add_argument("--mode", choices=MODES, default="retrieved")
+    evaluate.add_argument("--sample", type=int, default=0, help="1 repeats the generator calls")
+    evaluate.add_argument("--retrieval-only", action="store_true", help="no LLM calls")
+    evaluate.add_argument("--estimate", action="store_true", help="print the cost and stop")
+    evaluate.add_argument("--yes", action="store_true", help="go ahead above the cost limit")
+    evaluate.set_defaults(run=cmd_eval)
+
+    rep = commands.add_parser("report", help="rebuild results/results.csv and the README table")
+    rep.set_defaults(run=cmd_report)
+
+    comp = commands.add_parser("compare", help="paired difference between two runs")
+    comp.add_argument("run_a")
+    comp.add_argument("run_b")
+    comp.set_defaults(run=cmd_compare)
 
     args = parser.parse_args()
     args.run(args)

@@ -87,6 +87,9 @@ class Trace:
 
     question: str
     candidates: list[Candidate] = field(default_factory=list)
+    # The chunks pasted into the prompt. Usually the top of `candidates`; the evaluator
+    # retrieves deeper than it prompts, and can also supply gold evidence or nothing.
+    context: list[Chunk] = field(default_factory=list)
     system_prompt: str = ""
     user_prompt: str = ""
     answer: str = ""
@@ -94,4 +97,5 @@ class Trace:
     models: dict[str, str] = field(default_factory=dict)
     timings: dict[str, float] = field(default_factory=dict)  # seconds per step
     usage: dict[str, int] = field(default_factory=dict)  # tokens per kind
-    cost_usd: float = 0.0
+    cost_usd: float = 0.0  # at list price, whether or not the answer came from the cache
+    cached: bool = False

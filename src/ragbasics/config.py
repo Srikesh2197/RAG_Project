@@ -48,6 +48,27 @@ class PipelineConfig(StrictModel):
     generator: ComponentSpec
 
 
+class BootstrapConfig(StrictModel):
+    samples: int = Field(gt=0)
+    seed: int
+
+
+class EvalConfig(StrictModel):
+    """How a pipeline is evaluated. Shared by every run, so runs stay comparable."""
+
+    questions: Path
+    documents: Path
+    depth: int = Field(gt=0)  # chunks retrieved per question for the retrieval metrics
+    ks: list[int]  # cut-offs for recall@k and full-support@k
+    rank_k: int = Field(gt=0)  # cut-off for MRR and nDCG
+    token_budget: int = Field(gt=0)
+    judge: ComponentSpec
+    bootstrap: BootstrapConfig
+    workers: int = Field(gt=0)  # parallel API calls
+    cache: Path
+    confirm_above_usd: float  # a run estimated above this needs --yes
+
+
 def load_config[T: BaseModel](path: str | Path, model: type[T]) -> T:
     with open(path) as f:
         return model.model_validate(yaml.safe_load(f))

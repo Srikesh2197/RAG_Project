@@ -1,0 +1,27 @@
+# How every pipeline is evaluated (Stage 2). Kept apart from the pipeline configs so that
+# a stage comparison changes the pipeline and never the measurement.
+
+# Development split only. The runner refuses the test files unless asked explicitly.
+questions: data/processed/questions_dev.jsonl
+documents: data/processed/documents.jsonl
+
+# Chunks retrieved per question for scoring. Deeper than the prompt's top_k, so ranks
+# below the prompt cut-off and the token-budget metrics can be measured.
+depth: 50
+ks: [5, 10]
+rank_k: 10
+# Evidence recall and precision are also measured inside this many retrieved tokens,
+# which is comparable across chunk sizes where a fixed k is not.
+token_budget: 2000
+
+# A different vendor from the generator.
+judge:
+  name: openai
+  params: {model: gpt-6-luna}
+
+# Confidence intervals: redraw evidence clusters this many times.
+bootstrap: {samples: 2000, seed: 0}
+
+workers: 6
+cache: data/cache/llm.sqlite
+confirm_above_usd: 1.0

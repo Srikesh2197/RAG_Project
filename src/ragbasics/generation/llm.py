@@ -12,6 +12,7 @@ class Generation:
     input_tokens: int = 0
     output_tokens: int = 0
     stop_reason: str = ""
+    cached: bool = False  # read from the disk cache, so nothing was billed
 
 
 class Generator(Protocol):
@@ -33,6 +34,8 @@ class AnthropicGenerator:
         self.max_tokens = max_tokens
         self.effort = effort
         self._client = client
+        # The settings that change the output; part of the disk-cache key.
+        self.cache_params = {"max_tokens": max_tokens, "effort": effort}
 
     @property
     def client(self) -> Any:
@@ -60,6 +63,53 @@ class AnthropicGenerator:
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
             stop_reason=response.stop_reason or "",
+        )
+
+
+@register("generator", "openai")
+class OpenAIGenerator:
+    """An OpenAI chat model. Used as the judge (Stage 2), from a different vendor than
+    the generator so that no model grades its own family."""
+
+    def __init__(
+        self,
+        model: str,
+        max_tokens: int = 2000,
+        reasoning_effort: str | None = None,
+        client: Any = None,
+    ):
+        self.model = model
+        self.max_tokens = max_tokens
+        self.reasoning_effort = reasoning_effort
+        self._client = client
+        self.cache_params = {"max_tokens": max_tokens, "reasoning_effort": reasoning_effort}
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            from openai import OpenAI
+
+            self._client = OpenAI()
+        return self._client
+
+    def generate(self, system: str, user: str) -> Generation:
+        request: dict[str, Any] = {
+            "model": self.model,
+            "max_completion_tokens": self.max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if self.reasoning_effort:
+            request["reasoning_effort"] = self.reasoning_effort
+        response = self.client.chat.completions.create(**request)
+        choice = response.choices[0]
+        return Generation(
+            text=(choice.message.content or "").strip(),
+            input_tokens=response.usage.prompt_tokens,
+            output_tokens=response.usage.completion_tokens,
+            stop_reason=choice.finish_reason or "",
         )
 
 

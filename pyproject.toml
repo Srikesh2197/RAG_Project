@@ -27,6 +27,8 @@ rag = "ragbasics.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    # Library equivalent of the hand-written retrieval metrics; used by a parity test.
+    "ranx>=0.3.20",
     "ruff>=0.6",
 ]
 

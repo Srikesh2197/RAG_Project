@@ -2,7 +2,7 @@ PYTHON ?= python3
 VENV := .venv
 BIN := $(VENV)/bin
 
-.PHONY: setup data profile ingest app app-offline test lint lock
+.PHONY: setup data profile ingest app app-offline eval report test lint lock
 
 setup:
 	$(PYTHON) -m venv $(VENV)
@@ -26,6 +26,13 @@ app:
 app-offline:
 	$(BIN)/rag ingest --config configs/offline.yaml
 	$(BIN)/streamlit run app/streamlit_app.py -- --config configs/offline.yaml
+
+# Stage 2. Prints a cost estimate first; a run above $$1 needs `rag eval --yes`.
+eval:
+	$(BIN)/rag eval --config configs/baseline.yaml
+
+report:
+	$(BIN)/rag report
 
 test:
 	$(BIN)/python -m pytest -q

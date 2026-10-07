@@ -15,7 +15,15 @@ EMBEDDING_PRICE = {
 # (input, output)
 GENERATION_PRICE = {
     "claude-sonnet-5-5": (2.00, 10.00),
+    # OpenAI, checked on the pricing page on 4 October 2026.
+    "gpt-6-luna": (0.10, 0.50),
+    "gpt-6.1-sol": (2.00, 10.00),
 }
+
+# Claude counts more tokens than tiktoken's cl100k_base for the same text. Measured on
+# the Stage 1 calls: about 4,000 billed for prompts of about 2,750 cl100k tokens.
+# Used only for estimates printed before a run; bills use the counts the API returns.
+CLAUDE_TOKENS_PER_CL100K = 1.45
 
 LEDGER_FIELDS = ["time", "step", "model", "input_tokens", "output_tokens", "cost_usd"]
 

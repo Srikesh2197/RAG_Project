@@ -1,0 +1,362 @@
+{
+  "c01": {
+    "run": "baseline",
+    "question_id": "q_0452",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c02": {
+    "run": "baseline",
+    "question_id": "q_1730",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c03": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0038",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c04": {
+    "run": "baseline",
+    "question_id": "q_1613",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c05": {
+    "run": "baseline",
+    "question_id": "q_1803",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c06": {
+    "run": "baseline-gold",
+    "question_id": "q_1375",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c07": {
+    "run": "baseline",
+    "question_id": "q_1462",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c08": {
+    "run": "baseline-closed_book",
+    "question_id": "q_2030",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c09": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0504",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c10": {
+    "run": "baseline-gold",
+    "question_id": "q_0338",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c11": {
+    "run": "baseline",
+    "question_id": "q_1574",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c12": {
+    "run": "baseline",
+    "question_id": "q_0904",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c13": {
+    "run": "baseline-closed_book",
+    "question_id": "q_1437",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c14": {
+    "run": "baseline",
+    "question_id": "q_1246",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c15": {
+    "run": "baseline",
+    "question_id": "q_0721",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c16": {
+    "run": "baseline",
+    "question_id": "q_2230",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c17": {
+    "run": "baseline",
+    "question_id": "q_0089",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c18": {
+    "run": "baseline-gold",
+    "question_id": "q_0410",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c19": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0601",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c20": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0961",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c21": {
+    "run": "baseline-gold",
+    "question_id": "q_0028",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c22": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0170",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c23": {
+    "run": "baseline",
+    "question_id": "q_1437",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c24": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0149",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c25": {
+    "run": "baseline-closed_book",
+    "question_id": "q_1740",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c26": {
+    "run": "baseline-closed_book",
+    "question_id": "q_1803",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c27": {
+    "run": "baseline-gold",
+    "question_id": "q_1260",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c28": {
+    "run": "baseline-closed_book",
+    "question_id": "q_1989",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c29": {
+    "run": "baseline",
+    "question_id": "q_2280",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c30": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0537",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c31": {
+    "run": "baseline-closed_book",
+    "question_id": "q_2499",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c32": {
+    "run": "baseline-closed_book",
+    "question_id": "q_2283",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c33": {
+    "run": "baseline",
+    "question_id": "q_0582",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "c34": {
+    "run": "baseline-gold",
+    "question_id": "q_0960",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c35": {
+    "run": "baseline",
+    "question_id": "q_1905",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c36": {
+    "run": "baseline-gold",
+    "question_id": "q_0098",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c37": {
+    "run": "baseline",
+    "question_id": "q_0156",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c38": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0518",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c39": {
+    "run": "baseline-closed_book",
+    "question_id": "q_0839",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "c40": {
+    "run": "baseline-closed_book",
+    "question_id": "q_2217",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f01": {
+    "run": "baseline-gold",
+    "question_id": "q_0258",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f02": {
+    "run": "baseline-gold",
+    "question_id": "q_0405",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": false
+  },
+  "f03": {
+    "run": "baseline-gold",
+    "question_id": "q_1101",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f04": {
+    "run": "baseline-gold",
+    "question_id": "q_0149",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f05": {
+    "run": "baseline-gold",
+    "question_id": "q_0991",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f06": {
+    "run": "baseline-gold",
+    "question_id": "q_2015",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f07": {
+    "run": "baseline-gold",
+    "question_id": "q_0089",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f08": {
+    "run": "baseline-gold",
+    "question_id": "q_0904",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f09": {
+    "run": "baseline-gold",
+    "question_id": "q_2050",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f10": {
+    "run": "baseline-gold",
+    "question_id": "q_0972",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f11": {
+    "run": "baseline-gold",
+    "question_id": "q_0379",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "f12": {
+    "run": "baseline-gold",
+    "question_id": "q_1967",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f13": {
+    "run": "baseline-gold",
+    "question_id": "q_0960",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f14": {
+    "run": "baseline-gold",
+    "question_id": "q_2368",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f15": {
+    "run": "baseline-gold",
+    "question_id": "q_0518",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f16": {
+    "run": "baseline-gold",
+    "question_id": "q_1869",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f17": {
+    "run": "baseline-gold",
+    "question_id": "q_2217",
+    "gpt-6-luna": true,
+    "gpt-6.1-sol": true
+  },
+  "f18": {
+    "run": "baseline-gold",
+    "question_id": "q_1069",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  },
+  "f19": {
+    "run": "baseline-gold",
+    "question_id": "q_0098",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": false
+  },
+  "f20": {
+    "run": "baseline-gold",
+    "question_id": "q_1535",
+    "gpt-6-luna": false,
+    "gpt-6.1-sol": true
+  }
+}
