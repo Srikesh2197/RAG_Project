@@ -44,6 +44,10 @@ class PipelineConfig(StrictModel):
     chunker: ComponentSpec
     embedder: ComponentSpec
     store: ComponentSpec
+    # How chunks are ranked for a question: dense (vector search), sparse (BM25) or
+    # hybrid (both, fused). Every retriever ranks the chunks already in the store, so
+    # this is not part of what the index depends on either.
+    retriever: ComponentSpec = ComponentSpec(name="dense")
     top_k: int = Field(gt=0)
     # Search this many times deeper than asked, before chunks that return the same text
     # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.

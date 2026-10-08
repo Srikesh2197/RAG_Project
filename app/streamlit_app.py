@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from ragbasics.cli import DEFAULT_DOCUMENTS, LEDGER, source_label
+from ragbasics.cli import DEFAULT_DOCUMENTS, LEDGER, found_by, source_label
 from ragbasics.config import PipelineConfig, load_config
 from ragbasics.eval.dataset import read_documents
 from ragbasics.pipeline import Pipeline
@@ -61,7 +61,11 @@ def render_trace(trace: Trace) -> None:
         for c in trace.candidates:
             chunk = c.chunk
             st.markdown(f"**{c.rank}. score {c.score:.3f}** · {source_label(chunk.metadata)}")
-            st.caption(f"{chunk.chunk_id} · characters {chunk.start_char} to {chunk.end_char}")
+            ranks = found_by(trace, chunk.chunk_id)
+            st.caption(
+                f"{chunk.chunk_id} · characters {chunk.start_char} to {chunk.end_char}"
+                + (f" · rank in each retriever: {ranks}" if ranks else "")
+            )
             st.text(chunk.text)
     with st.expander("Prompt sent to the generator"):
         st.caption("System")
@@ -105,6 +109,7 @@ def sidebar(config_path: str) -> Pipeline:
         st.caption(
             f"Config `{pipeline.cfg.name}`: {pipeline.cfg.chunker.name} chunks "
             f"{pipeline.cfg.chunker.params}, {pipeline.embedder.model}, "
+            f"{pipeline.cfg.retriever.name} retrieval, "
             f"top {pipeline.cfg.top_k}, {pipeline.generator.model}"
         )
     st.session_state.collection = collection

@@ -261,10 +261,18 @@ def run_eval(
             embed_cost = embedding_cost(pipeline.embedder.model, embed_tokens)
             if embed_cost:
                 spend[pipeline.embedder.model] = [embed_tokens, 0, embed_cost]
+            depth = eval_cfg.depth
             for q in questions:
                 trace, row = traces[q.question_id], rows[q.question_id]
                 chunks = [c.chunk for c in trace.candidates]
                 row["retrieved"] = [[c.chunk.chunk_id, round(c.score, 4)] for c in trace.candidates]
+                if len(trace.retrievers) > 1:
+                    # Hybrid: each retriever's own list, to the depth that is scored, so
+                    # a run shows which retriever found what.
+                    row["by_retriever"] = {
+                        name: [[c.chunk.chunk_id, round(c.score, 4)] for c in found[:depth]]
+                        for name, found in trace.retrievers.items()
+                    }
                 if q.evidence:
                     row["gold_ranks"] = rm.gold_ranks(chunks, q.evidence)
                     row["scores"] |= score_retrieval(

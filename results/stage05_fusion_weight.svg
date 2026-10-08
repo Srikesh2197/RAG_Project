@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" font-family="sans-serif" font-size="12">
+<rect width="800" height="400" fill="white"/>
+<text x="60" y="18" font-size="14">Evidence recall within 2,000 retrieved tokens, by fusion weight</text>
+<line x1="60" y1="339.9999999999999" x2="500" y2="339.9999999999999" stroke="#ddd"/>
+<text x="52" y="343.9999999999999" text-anchor="end">55%</text>
+<line x1="60" y1="278.0" x2="500" y2="278.0" stroke="#ddd"/>
+<text x="52" y="282.0" text-anchor="end">60%</text>
+<line x1="60" y1="216.0" x2="500" y2="216.0" stroke="#ddd"/>
+<text x="52" y="220.0" text-anchor="end">65%</text>
+<line x1="60" y1="154.0" x2="500" y2="154.0" stroke="#ddd"/>
+<text x="52" y="158.0" text-anchor="end">70%</text>
+<line x1="60" y1="92.0" x2="500" y2="92.0" stroke="#ddd"/>
+<text x="52" y="96.0" text-anchor="end">75%</text>
+<line x1="60" y1="30.0" x2="500" y2="30.0" stroke="#ddd"/>
+<text x="52" y="34.0" text-anchor="end">80%</text>
+<text x="60.0" y="358" text-anchor="middle">0</text>
+<text x="170.0" y="358" text-anchor="middle">0.25</text>
+<text x="280.0" y="358" text-anchor="middle">0.5</text>
+<text x="390.0" y="358" text-anchor="middle">0.75</text>
+<text x="500.0" y="358" text-anchor="middle">1</text>
+<polyline points="60.0,176.3 104.0,157.3 148.0,144.1 192.0,129.2 236.0,113.6 280.0,119.4 324.0,132.3 368.0,156.5 412.0,180.8 456.0,207.3 500.0,230.5" fill="none" stroke="#1f5fa8" stroke-width="2"/>
+<circle cx="60.0" cy="176.3" r="3" fill="#1f5fa8"/>
+<circle cx="104.0" cy="157.3" r="3" fill="#1f5fa8"/>
+<circle cx="148.0" cy="144.1" r="3" fill="#1f5fa8"/>
+<circle cx="192.0" cy="129.2" r="3" fill="#1f5fa8"/>
+<circle cx="236.0" cy="113.6" r="3" fill="#1f5fa8"/>
+<circle cx="280.0" cy="119.4" r="3" fill="#1f5fa8"/>
+<circle cx="324.0" cy="132.3" r="3" fill="#1f5fa8"/>
+<circle cx="368.0" cy="156.5" r="3" fill="#1f5fa8"/>
+<circle cx="412.0" cy="180.8" r="3" fill="#1f5fa8"/>
+<circle cx="456.0" cy="207.3" r="3" fill="#1f5fa8"/>
+<circle cx="500.0" cy="230.5" r="3" fill="#1f5fa8"/>
+<polyline points="60.0,176.3 104.0,163.1 148.0,149.2 192.0,137.3 236.0,112.6 280.0,112.8 324.0,128.6 368.0,142.1 412.0,169.1 456.0,204.0 500.0,230.5" fill="none" stroke="#c2571a" stroke-width="2"/>
+<circle cx="60.0" cy="176.3" r="3" fill="#c2571a"/>
+<circle cx="104.0" cy="163.1" r="3" fill="#c2571a"/>
+<circle cx="148.0" cy="149.2" r="3" fill="#c2571a"/>
+<circle cx="192.0" cy="137.3" r="3" fill="#c2571a"/>
+<circle cx="236.0" cy="112.6" r="3" fill="#c2571a"/>
+<circle cx="280.0" cy="112.8" r="3" fill="#c2571a"/>
+<circle cx="324.0" cy="128.6" r="3" fill="#c2571a"/>
+<circle cx="368.0" cy="142.1" r="3" fill="#c2571a"/>
+<circle cx="412.0" cy="169.1" r="3" fill="#c2571a"/>
+<circle cx="456.0" cy="204.0" r="3" fill="#c2571a"/>
+<circle cx="500.0" cy="230.5" r="3" fill="#c2571a"/>
+<line x1="60" y1="117.5" x2="500" y2="117.5" stroke="#555555" stroke-width="1.5"/>
+<polyline points="60.0,206.9 104.0,186.2 148.0,165.5 192.0,147.7 236.0,133.8 280.0,135.6 324.0,161.8 368.0,196.8 412.0,229.1 456.0,243.8 500.0,285.2" fill="none" stroke="#1f5fa8" stroke-width="2" stroke-dasharray="5 4"/>
+<polyline points="60.0,206.9 104.0,188.5 148.0,174.2 192.0,166.3 236.0,137.1 280.0,133.5 324.0,141.8 368.0,180.8 412.0,209.9 456.0,237.9 500.0,285.2" fill="none" stroke="#c2571a" stroke-width="2" stroke-dasharray="5 4"/>
+<line x1="60" y1="164.0" x2="500" y2="164.0" stroke="#555555" stroke-width="1.5" stroke-dasharray="5 4"/>
+<line x1="514" y1="46" x2="540" y2="46" stroke="#1f5fa8" stroke-width="2"/>
+<text x="546" y="50">minmax, development (reported)</text>
+<line x1="514" y1="66" x2="540" y2="66" stroke="#c2571a" stroke-width="2"/>
+<text x="546" y="70">zscore, development (reported)</text>
+<line x1="514" y1="86" x2="540" y2="86" stroke="#555555" stroke-width="2"/>
+<text x="546" y="90">RRF at 60, development (reported)</text>
+<line x1="514" y1="106" x2="540" y2="106" stroke="#1f5fa8" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="546" y="110">minmax, pool (tuned on)</text>
+<line x1="514" y1="126" x2="540" y2="126" stroke="#c2571a" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="546" y="130">zscore, pool (tuned on)</text>
+<line x1="514" y1="146" x2="540" y2="146" stroke="#555555" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="546" y="150">RRF at 60, pool (tuned on)</text>
+<text x="60.0" y="376" text-anchor="middle">BM25 only</text>
+<text x="500.0" y="376" text-anchor="middle">dense only</text>
+<text x="280.0" y="392" text-anchor="middle">weight of the dense list</text>
+</svg>

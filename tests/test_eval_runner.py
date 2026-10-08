@@ -346,3 +346,22 @@ def test_retrieval_only_does_not_overwrite_an_answer_run(setup):
     run()
     with pytest.raises(ValueError, match="would overwrite"):
         run(answers=False)
+
+
+def test_a_hybrid_run_records_each_retrievers_list(setup):
+    _, tmp_path, pipeline_cfg, eval_cfg = setup
+    hybrid = PipelineConfig.model_validate(
+        pipeline_cfg.model_dump() | {"name": "tiny-hybrid", "retriever": {"name": "hybrid"}}
+    )
+    out = run_eval(hybrid, eval_cfg, answers=False, runs_dir=tmp_path / "runs", log=lambda _: None)
+    _, rows = read(out)
+    lists = rows["q1"]["by_retriever"]
+    assert set(lists) == {"dense", "sparse"}
+    assert lists["sparse"][0][0] == rows["q1"]["retrieved"][0][0] == "doc_a:0000"
+    assert rows["q1"]["gold_ranks"] == [1]
+
+    # A dense run has one list, which `retrieved` already holds.
+    _, rows = read(run_eval(
+        pipeline_cfg, eval_cfg, answers=False, runs_dir=tmp_path / "runs2", log=lambda _: None
+    ))
+    assert "by_retriever" not in rows["q1"]

@@ -1,0 +1,31 @@
+# Stage 5: BM25 alone, with each chunk's title, source and date also indexed.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the retriever only, and
+# ranks the chunks of the index that config built.
+name: retr-sparse-header
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+# A second variable on top of sparse.yaml: what BM25 indexes. The text returned is
+# still the chunk's own. Advanced stage A1 tests the same idea on the embeddings.
+retriever:
+  name: sparse
+  params: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0, header: true}
+
+top_k: 5
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

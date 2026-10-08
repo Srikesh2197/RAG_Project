@@ -74,6 +74,8 @@ class Candidate:
     chunk: Chunk
     score: float
     rank: int
+    # Which retriever produced this rank and score: "dense", "sparse" or "hybrid". The
+    # score's scale depends on it (a cosine, a BM25 score, a fused score).
     retriever: str = "dense"
 
 
@@ -87,6 +89,10 @@ class Trace:
 
     question: str
     candidates: list[Candidate] = field(default_factory=list)
+    # Each underlying retriever's own list, before fusion, with its own scores and
+    # ranks. One entry for dense or sparse search; two for hybrid, where `candidates`
+    # is the fused list. Shows which retriever found what.
+    retrievers: dict[str, list[Candidate]] = field(default_factory=dict)
     # The chunks pasted into the prompt. Usually the top of `candidates`; the evaluator
     # retrieves deeper than it prompts, and can also supply gold evidence or nothing.
     context: list[Chunk] = field(default_factory=list)

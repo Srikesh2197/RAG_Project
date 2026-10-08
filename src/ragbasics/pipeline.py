@@ -1,7 +1,10 @@
 """The pipeline: build components from a config, ingest documents, answer questions.
 
     Index time:  documents -> chunker -> embedder -> store (saved to disk)
-    Query time:  question -> embedder -> store.search -> prompt -> generator -> Trace
+    Query time:  question -> retriever -> prompt -> generator -> Trace
+
+The retriever is dense (embed the question, search the vectors), sparse (BM25 over the
+same chunks) or hybrid (both, fused).
 """
 
 import time
@@ -19,7 +22,10 @@ import ragbasics.embedding.hashing
 import ragbasics.embedding.local
 import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
-import ragbasics.index.numpy_store  # noqa: F401
+import ragbasics.index.numpy_store
+import ragbasics.retrieval.dense
+import ragbasics.retrieval.hybrid
+import ragbasics.retrieval.sparse  # noqa: F401
 from ragbasics.config import ComponentSpec, PipelineConfig
 from ragbasics.context.prompts import (
     CLOSED_BOOK_SYSTEM_PROMPT,
@@ -84,6 +90,7 @@ class Pipeline:
         if cfg.embedding_cache and hasattr(self.embedder, "cache"):
             self.embedder.cache = EmbeddingCache(cfg.embedding_cache)
         self.store = _build("store", cfg.store)
+        self.retriever = _build("retriever", cfg.retriever)
         self.generator = _build("generator", cfg.generator)
 
     # --- Index time ------------------------------------------------------------------
@@ -167,24 +174,22 @@ class Pipeline:
     # --- Query time ------------------------------------------------------------------
 
     def retrieve(self, question: str, k: int | None = None) -> Trace:
-        """Embed the question and search. `k` defaults to the config's `top_k`; the
-        evaluator asks for more, to score ranks below the ones that reach the prompt."""
+        """Rank chunks for the question with the configured retriever. `k` defaults to
+        the config's `top_k`; the evaluator asks for more, to score ranks below the ones
+        that reach the prompt."""
         if len(self.store) == 0:
             raise ValueError("The index is empty. Ingest documents first.")
         trace = Trace(
             question=question,
             models={"embedder": self.embedder.model, "generator": self.generator.model},
         )
-        t0 = time.perf_counter()
-        embedded = self.embedder.embed([question], kind="query")
-        t1 = time.perf_counter()
         k = k or self.cfg.top_k
-        found = self.store.search(embedded.vectors[0], k * self.cfg.overfetch)
-        trace.candidates = collapse_duplicates(found)[:k]
-        t2 = time.perf_counter()
-        trace.timings = {"embed_query": t1 - t0, "search": t2 - t1}
-        trace.usage = {"embed_tokens": embedded.tokens}
-        trace.cost_usd = embedding_cost(self.embedder.model, embedded.tokens)
+        found = self.retriever.retrieve(question, k * self.cfg.overfetch, self)
+        trace.candidates = collapse_duplicates(found.candidates)[:k]
+        trace.retrievers = found.lists
+        trace.timings = found.timings
+        trace.usage = {"embed_tokens": found.embed_tokens}
+        trace.cost_usd = embedding_cost(self.embedder.model, found.embed_tokens)
         return trace
 
     def generate(self, trace: Trace, context: list[Chunk] | None) -> Trace:

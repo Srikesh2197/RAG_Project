@@ -40,6 +40,8 @@ local = [
 # Library versions of hand-written parts, used only by framework_equivalents/ and its
 # parity tests. Nothing in src/ imports them.
 frameworks = [
+    # Library equivalent of the hand-written BM25 index (Stage 5).
+    "bm25s>=0.3",
     "langchain-text-splitters>=1.1",
 ]
 

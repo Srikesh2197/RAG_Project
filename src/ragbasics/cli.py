@@ -37,13 +37,27 @@ def source_label(metadata: dict) -> str:
     return ": ".join(part for part in (head, title) if part)
 
 
+def found_by(trace: Trace, chunk_id: str) -> str:
+    """'dense 3, sparse 41' for a fused chunk: its rank in each retriever's own list.
+    Empty unless the trace holds more than one list (hybrid retrieval)."""
+    if len(trace.retrievers) < 2:
+        return ""
+    parts = []
+    for name, candidates in trace.retrievers.items():
+        rank = next((c.rank for c in candidates if c.chunk.chunk_id == chunk_id), None)
+        parts.append(f"{name} {rank if rank else 'not found'}")
+    return ", ".join(parts)
+
+
 def format_trace(trace: Trace) -> str:
     lines = [f"Answer: {trace.answer}", "", "Retrieved chunks:"]
     for c in trace.candidates:
         chunk = c.chunk
+        ranks = found_by(trace, chunk.chunk_id)
         lines.append(
             f"  {c.rank}. score {c.score:.3f}  {chunk.chunk_id} "
             f"[{chunk.start_char}:{chunk.end_char}]  {source_label(chunk.metadata)}"
+            + (f"  ({ranks})" if ranks else "")
         )
     timings = ", ".join(f"{step} {s * 1000:.0f} ms" for step, s in trace.timings.items())
     lines += ["", f"Time: {timings}", f"Tokens: {trace.usage}  Cost: ${trace.cost_usd:.4f}"]

@@ -1,0 +1,30 @@
+# Stage 5: BM25 alone, with the settings most libraries start from.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the retriever only, and
+# ranks the chunks of the index that config built.
+name: retr-sparse-default
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+# No stopword list, no stemming, k1 1.2, b 0.75.
+retriever:
+  name: sparse
+  params: {stopwords: false, stemmer: none, k1: 1.2, b: 0.75}
+
+top_k: 5
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

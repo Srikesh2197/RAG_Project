@@ -1,0 +1,33 @@
+# Stage 5: dense and BM25 fused by reciprocal rank, with the usual constant of 60.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the retriever only, and
+# ranks the chunks of the index that config built.
+name: retr-hybrid-rrf
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+# k: 60 is the value from the paper that introduced the method; it needs no labels.
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+top_k: 5
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

@@ -1,0 +1,36 @@
+# Stage 5: the best config so far, with 25 chunks in the prompt.
+# hybrid-rrf.yaml with top_k 25, for an answer-quality run and the app.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the retriever only, and
+# ranks the chunks of the index that config built.
+name: retr-hybrid-rrf-top25
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+# k: 60 is the value from the paper that introduced the method; it needs no labels.
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# 25 chunks of about 92 tokens, as in configs/stage03_chunking/recursive-128-k25.yaml.
+# A placeholder: Stage 8 chooses the number of chunks.
+top_k: 25
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}
