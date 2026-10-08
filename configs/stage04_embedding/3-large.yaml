@@ -1,0 +1,25 @@
+# Stage 4: text-embedding-3-large, 3,072 dimensions.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the embedder only.
+name: embed-3-large
+index_dir: data/index/embed-3-large
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-large}
+
+store:
+  name: numpy
+
+top_k: 5
+
+# Vectors already computed. A truncated length reuses the full vector, and the same
+# text always gets the same vector.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

@@ -16,6 +16,7 @@ import ragbasics.chunking.parent_child
 import ragbasics.chunking.recursive
 import ragbasics.chunking.semantic
 import ragbasics.embedding.hashing
+import ragbasics.embedding.local
 import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
 import ragbasics.index.numpy_store  # noqa: F401
@@ -27,6 +28,7 @@ from ragbasics.context.prompts import (
     build_user_prompt,
 )
 from ragbasics.costs import append_ledger, embedding_cost, generation_cost
+from ragbasics.embedding.cache import EmbeddingCache
 from ragbasics.registry import build
 from ragbasics.types import Candidate, Chunk, Document, Trace
 
@@ -79,6 +81,8 @@ class Pipeline:
         self.ledger = ledger
         self.chunker = _build("chunker", cfg.chunker)
         self.embedder = _build("embedder", cfg.embedder)
+        if cfg.embedding_cache and hasattr(self.embedder, "cache"):
+            self.embedder.cache = EmbeddingCache(cfg.embedding_cache)
         self.store = _build("store", cfg.store)
         self.generator = _build("generator", cfg.generator)
 
@@ -172,7 +176,7 @@ class Pipeline:
             models={"embedder": self.embedder.model, "generator": self.generator.model},
         )
         t0 = time.perf_counter()
-        embedded = self.embedder.embed([question])
+        embedded = self.embedder.embed([question], kind="query")
         t1 = time.perf_counter()
         k = k or self.cfg.top_k
         found = self.store.search(embedded.vectors[0], k * self.cfg.overfetch)

@@ -1,0 +1,29 @@
+# Stage 4: Qwen3-Embedding-0.6B (2025, 1,024 dimensions), run locally.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the embedder only.
+name: embed-qwen3
+index_dir: data/index/embed-qwen3
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: local
+  params:
+    model: Qwen/Qwen3-Embedding-0.6B
+    revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3
+    # The query prompt in the model's own config. Passages get none.
+    query_prefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:"
+
+store:
+  name: numpy
+
+top_k: 5
+
+# Vectors already computed. A truncated length reuses the full vector, and the same
+# text always gets the same vector.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

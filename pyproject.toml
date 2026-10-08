@@ -31,6 +31,12 @@ dev = [
     "ranx>=0.3.20",
     "ruff>=0.6",
 ]
+# Embedding models run on this machine (Stage 4). About 600 MB installed, so it is
+# not a base dependency; src/ imports it only when a "local" embedder is first used.
+local = [
+    "sentence-transformers>=6.1",
+    "torch>=2.14",
+]
 # Library versions of hand-written parts, used only by framework_equivalents/ and its
 # parity tests. Nothing in src/ imports them.
 frameworks = [

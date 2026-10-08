@@ -14,8 +14,8 @@ Core mechanics are written from scratch first. Library equivalents are shown nex
 | 1 | Naive baseline and Streamlit app | done | [01-naive-baseline.md](docs/stages/01-naive-baseline.md) |
 | 2 | Evaluation harness | done; human check of the judge deferred | [02-evaluation-harness.md](docs/stages/02-evaluation-harness.md) |
 | 3 | Chunking | done | [03-chunking.md](docs/stages/03-chunking.md) |
-| 4 | Embedding models | next | |
-| 5 | Sparse and hybrid retrieval | | |
+| 4 | Embedding models | done | [04-embedding-models.md](docs/stages/04-embedding-models.md) |
+| 5 | Sparse and hybrid retrieval | next | |
 | 6 | Reranking | | |
 | 7 | Query transformation | | |
 | 8 | Context assembly and prompt construction | | |
@@ -67,31 +67,51 @@ To try another chunker (Stage 3), each config builds its own index:
 .venv/bin/python scripts/stage03_sweep.py   # the chunking table, against the baseline
 ```
 
+To try another embedding model (Stage 4). The local models need `make setup-local` (PyTorch and sentence-transformers) and download their weights on first use:
+
+```bash
+.venv/bin/rag ingest --config configs/stage04_embedding/qwen3.yaml --estimate
+.venv/bin/rag ingest --config configs/stage04_embedding/qwen3.yaml
+.venv/bin/rag eval --config configs/stage04_embedding/qwen3.yaml --retrieval-only
+.venv/bin/python scripts/stage04_sweep.py   # the embedding table, against the best config so far
+```
+
 `make app-offline` runs the same app with no keys, using a word-hashing embedder and no LLM. It shows the mechanics, not useful answers.
 
 ## Results
 
 <!-- results:start -->
-Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" is the paired difference on the same questions; an interval that excludes 0 is a difference the question sample does not explain.
+Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" is the paired difference on the same questions; an interval that excludes 0 is a difference the question sample does not explain. "vs best so far" is the same difference against `chunk-recursive-128`, the configuration the current stage changes one variable in.
 
 **Retrieval** (441 development questions with gold evidence)
 
-| run | recall@5 | full support@5 | MRR@10 | nDCG@10 | recall in 2,000 tok | precision in 2,000 tok | recall in 2,000 tok vs baseline | precision in 2,000 tok vs baseline |
-|---|---|---|---|---|---|---|---|---|
-| baseline | 48.2 (41–57) | 21.5 (15–32) | 59.0 (53–66) | 49.0 (43–56) | 44.8 (38–53) | 1.7 (1.5–1.9) |  |  |
-| chunk-sentence-512 | 47.7 (41–56) | 20.6 (14–30) | 57.6 (53–64) | 48.8 (43–56) | 44.4 (38–53) | 1.7 (1.5–2.0) | -0.4 (-2.7 to +1.6) | +0.03 (-0.06 to +0.12) |
-| chunk-recursive-512 | 44.8 (39–52) | 17.5 (12–25) | 54.1 (50–60) | 46.4 (41–53) | 42.4 (37–50) | 1.6 (1.4–1.8) | -2.4 (-5.2 to -0.2) | -0.06 (-0.17 to +0.04) |
-| chunk-recursive-128 | 35.2 (30–42) | 12.0 (8–18) | 45.1 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) |
-| chunk-recursive-256 | 39.1 (33–47) | 15.2 (10–23) | 46.4 (42–53) | 39.9 (35–47) | 51.2 (44–60) | 1.9 (1.7–2.2) | +6.4 (+2.7 to +10.9) | +0.24 (+0.09 to +0.41) |
-| chunk-recursive-1024 | 53.6 (46–61) | 25.2 (18–35) | 61.6 (56–68) | 54.9 (49–61) | 36.7 (30–44) | 1.4 (1.3–1.6) | -8.1 (-13.2 to -4.1) | -0.28 (-0.45 to -0.14) |
-| chunk-fixed-128 | 38.2 (33–45) | 13.6 (9–21) | 47.7 (43–54) | 37.0 (33–43) | 60.9 (55–68) | 2.2 (2.0–2.4) | +16.1 (+12.3 to +19.3) | +0.50 (+0.31 to +0.66) |
-| chunk-fixed-512-overlap-10 | 46.3 (40–56) | 20.6 (14–30) | 52.2 (47–59) | 44.3 (38–52) | 42.0 (36–51) | 1.6 (1.4–1.9) | -2.8 (-7.3 to +0.7) | -0.07 (-0.24 to +0.09) |
-| chunk-fixed-512-overlap-20 | 44.0 (38–52) | 17.7 (12–27) | 51.6 (46–58) | 43.8 (39–51) | 38.8 (33–47) | 1.5 (1.3–1.7) | -6.0 (-10.1 to -2.6) | -0.20 (-0.36 to -0.05) |
-| chunk-parent-child-128-512 | 50.7 (45–58) | 22.9 (17–32) | 59.9 (56–66) | 52.6 (48–60) | 45.7 (40–54) | 1.8 (1.6–2.0) | +0.9 (-3.2 to +5.0) | +0.10 (-0.07 to +0.26) |
-| chunk-recursive-64 | 37.8 (33–44) | 13.6 (9–20) | 47.9 (42–55) | 38.9 (35–45) | 73.2 (69–80) | 3.0 (2.6–3.4) | +28.4 (+23.8 to +32.7) | +1.27 (+0.85 to +1.82) |
-| chunk-parent-child-128-256 | 42.3 (36–50) | 16.1 (11–24) | 52.0 (46–60) | 44.0 (39–51) | 55.0 (49–63) | 2.1 (1.9–2.3) | +10.2 (+5.3 to +14.4) | +0.43 (+0.23 to +0.62) |
-| chunk-semantic-128 | 38.8 (33–46) | 15.0 (10–21) | 48.3 (43–55) | 39.9 (35–46) | 63.4 (57–71) | 2.4 (2.3–2.6) | +18.6 (+14.5 to +22.4) | +0.75 (+0.52 to +0.92) |
-| chunk-recursive-128-k25 | 35.2 (30–42) | 12.0 (8–18) | 45.2 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) |
+| run | recall@5 | full support@5 | MRR@10 | nDCG@10 | recall in 2,000 tok | precision in 2,000 tok | recall in 2,000 tok vs baseline | precision in 2,000 tok vs baseline | recall in 2,000 tok vs best so far |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline | 48.2 (41–57) | 21.5 (15–32) | 59.0 (53–66) | 49.0 (43–56) | 44.8 (38–53) | 1.7 (1.5–1.9) |  |  | -19.0 (-22.7 to -14.7) |
+| chunk-sentence-512 | 47.7 (41–56) | 20.6 (14–30) | 57.6 (53–64) | 48.8 (43–56) | 44.4 (38–53) | 1.7 (1.5–2.0) | -0.4 (-2.7 to +1.6) | +0.03 (-0.06 to +0.12) | -19.4 (-23.0 to -15.2) |
+| chunk-recursive-512 | 44.8 (39–52) | 17.5 (12–25) | 54.1 (50–60) | 46.4 (41–53) | 42.4 (37–50) | 1.6 (1.4–1.8) | -2.4 (-5.2 to -0.2) | -0.06 (-0.17 to +0.04) | -21.4 (-25.2 to -17.2) |
+| chunk-recursive-128 | 35.2 (30–42) | 12.0 (8–18) | 45.1 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) |  |
+| chunk-recursive-256 | 39.1 (33–47) | 15.2 (10–23) | 46.4 (42–53) | 39.9 (35–47) | 51.2 (44–60) | 1.9 (1.7–2.2) | +6.4 (+2.7 to +10.9) | +0.24 (+0.09 to +0.41) | -12.6 (-15.4 to -9.0) |
+| chunk-recursive-1024 | 53.6 (46–61) | 25.2 (18–35) | 61.6 (56–68) | 54.9 (49–61) | 36.7 (30–44) | 1.4 (1.3–1.6) | -8.1 (-13.2 to -4.1) | -0.28 (-0.45 to -0.14) | -27.2 (-32.7 to -21.9) |
+| chunk-fixed-128 | 38.2 (33–45) | 13.6 (9–21) | 47.7 (43–54) | 37.0 (33–43) | 60.9 (55–68) | 2.2 (2.0–2.4) | +16.1 (+12.3 to +19.3) | +0.50 (+0.31 to +0.66) | -2.9 (-6.4 to +0.6) |
+| chunk-fixed-512-overlap-10 | 46.3 (40–56) | 20.6 (14–30) | 52.2 (47–59) | 44.3 (38–52) | 42.0 (36–51) | 1.6 (1.4–1.9) | -2.8 (-7.3 to +0.7) | -0.07 (-0.24 to +0.09) | -21.8 (-26.9 to -16.7) |
+| chunk-fixed-512-overlap-20 | 44.0 (38–52) | 17.7 (12–27) | 51.6 (46–58) | 43.8 (39–51) | 38.8 (33–47) | 1.5 (1.3–1.7) | -6.0 (-10.1 to -2.6) | -0.20 (-0.36 to -0.05) | -25.1 (-29.5 to -20.6) |
+| chunk-parent-child-128-512 | 50.7 (45–58) | 22.9 (17–32) | 59.9 (56–66) | 52.6 (48–60) | 45.7 (40–54) | 1.8 (1.6–2.0) | +0.9 (-3.2 to +5.0) | +0.10 (-0.07 to +0.26) | -18.1 (-21.7 to -13.8) |
+| chunk-recursive-64 | 37.8 (33–44) | 13.6 (9–20) | 47.9 (42–55) | 38.9 (35–45) | 73.2 (69–80) | 3.0 (2.6–3.4) | +28.4 (+23.8 to +32.7) | +1.27 (+0.85 to +1.82) | +9.4 (+5.5 to +13.0) |
+| chunk-parent-child-128-256 | 42.3 (36–50) | 16.1 (11–24) | 52.0 (46–60) | 44.0 (39–51) | 55.0 (49–63) | 2.1 (1.9–2.3) | +10.2 (+5.3 to +14.4) | +0.43 (+0.23 to +0.62) | -8.8 (-11.7 to -6.1) |
+| chunk-semantic-128 | 38.8 (33–46) | 15.0 (10–21) | 48.3 (43–55) | 39.9 (35–46) | 63.4 (57–71) | 2.4 (2.3–2.6) | +18.6 (+14.5 to +22.4) | +0.75 (+0.52 to +0.92) | -0.5 (-3.6 to +2.7) |
+| chunk-recursive-128-k25 | 35.2 (30–42) | 12.0 (8–18) | 45.2 (40–53) | 37.4 (33–44) | 63.8 (59–71) | 2.5 (2.2–2.7) | +19.0 (+14.7 to +22.7) | +0.81 (+0.54 to +1.09) | +0.0 (+0.0 to +0.0) |
+| embed-3-small-512 | 33.4 (28–41) | 10.7 (7–16) | 43.2 (38–52) | 35.8 (31–43) | 60.5 (55–67) | 2.4 (2.1–2.6) | +15.7 (+10.7 to +20.0) | +0.68 (+0.39 to +0.98) | -3.3 (-5.5 to -1.7) |
+| embed-3-small-256 | 31.0 (26–38) | 10.2 (6–16) | 40.1 (35–46) | 32.9 (29–38) | 56.7 (51–63) | 2.2 (2.0–2.5) | +11.9 (+6.5 to +16.1) | +0.56 (+0.27 to +0.82) | -7.1 (-10.7 to -4.4) |
+| embed-3-large-1024 | 37.2 (31–45) | 14.3 (9–22) | 48.1 (43–56) | 39.1 (33–47) | 62.1 (53–72) | 2.4 (2.2–2.7) | +17.3 (+12.7 to +22.7) | +0.69 (+0.53 to +0.86) | -1.8 (-6.3 to +3.0) |
+| embed-3-large-256 | 30.3 (26–37) | 8.4 (5–13) | 40.7 (36–47) | 32.5 (28–39) | 54.8 (47–63) | 2.1 (1.9–2.4) | +10.0 (+4.9 to +15.0) | +0.44 (+0.24 to +0.62) | -9.0 (-12.9 to -4.9) |
+| embed-bge-small | 33.3 (27–41) | 13.2 (9–19) | 39.4 (34–48) | 33.0 (28–40) | 53.9 (47–62) | 2.1 (1.9–2.3) | +9.1 (+5.1 to +13.0) | +0.38 (+0.22 to +0.52) | -9.9 (-12.9 to -6.5) |
+| embed-bge-small-noprefix | 31.5 (25–39) | 12.5 (9–18) | 37.2 (32–45) | 31.0 (26–38) | 51.5 (45–59) | 2.0 (1.8–2.2) | +6.7 (+2.0 to +10.4) | +0.29 (+0.09 to +0.43) | -12.3 (-15.5 to -9.3) |
+| embed-bge-small-96 | 21.1 (17–27) | 7.0 (4–12) | 25.0 (21–31) | 21.7 (18–27) | 40.5 (34–48) | 1.5 (1.4–1.7) | -4.3 (-9.3 to -0.2) | -0.15 (-0.34 to +0.02) | -23.3 (-27.4 to -19.0) |
+| embed-qwen3 | 42.1 (34–52) | 19.5 (14–28) | 51.8 (45–62) | 42.1 (36–51) | 64.1 (56–74) | 2.5 (2.2–2.7) | +19.3 (+15.5 to +23.5) | +0.78 (+0.60 to +0.95) | +0.2 (-3.3 to +4.5) |
+| embed-qwen3-noprefix | 40.0 (33–50) | 18.4 (13–26) | 49.6 (42–60) | 40.0 (33–49) | 61.0 (52–72) | 2.3 (2.1–2.7) | +16.2 (+12.0 to +22.1) | +0.66 (+0.50 to +0.87) | -2.8 (-6.9 to +2.6) |
+| embed-qwen3-256 | 36.4 (30–45) | 13.6 (9–20) | 46.3 (39–56) | 36.9 (31–46) | 55.1 (48–65) | 2.1 (1.9–2.4) | +10.3 (+6.2 to +15.4) | +0.45 (+0.27 to +0.63) | -8.7 (-11.7 to -4.7) |
+| embed-3-large | 38.7 (32–47) | 15.9 (11–24) | 49.2 (44–57) | 40.8 (35–49) | 63.8 (55–74) | 2.4 (2.2–2.7) | +19.0 (+14.4 to +24.6) | +0.76 (+0.60 to +0.92) | -0.0 (-4.6 to +4.6) |
 
 **Answers**
 

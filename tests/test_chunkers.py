@@ -184,7 +184,7 @@ class TopicEmbedder:
     def __init__(self) -> None:
         self.calls = 0
 
-    def embed(self, batch: list[str]) -> Embedded:
+    def embed(self, batch: list[str], kind: str = "document") -> Embedded:
         self.calls += 1
         rows = [[1.0, 0.0] if "bakery" in text else [0.0, 1.0] for text in batch]
         return Embedded(np.asarray(rows, dtype=np.float32), tokens=10 * len(batch))

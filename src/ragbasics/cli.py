@@ -77,12 +77,18 @@ def cmd_ingest(args: argparse.Namespace) -> None:
                      "build of the same text. Nothing was embedded.")
 
     chunks = pipeline.chunk(new)
-    tokens = count([c.text_to_embed for c in chunks])
-    estimate = embedding_cost(pipeline.embedder.model, tokens)
+    texts = [c.text_to_embed for c in chunks]
+    # Vectors in the embedding cache are not computed or paid for again.
+    embedder = pipeline.embedder
+    to_embed = embedder.uncached(texts) if hasattr(embedder, "uncached") else texts
+    tokens = count(to_embed)
+    estimate = embedding_cost(embedder.model, tokens)
     print(
         f"{len(documents)} documents, {len(indexed)} already indexed. "
-        f"To embed: {len(chunks)} chunks, about {tokens:,} tokens, "
-        f"about ${estimate:.4f} with {pipeline.embedder.model}."
+        f"{len(chunks)} chunks holding {len(set(texts))} distinct texts, "
+        f"{len(set(texts)) - len(set(to_embed))} of them with a cached vector. "
+        f"To embed: {len(to_embed)} texts, about {tokens:,} tokens, "
+        f"about ${estimate:.4f} with {embedder.model}."
     )
     if args.estimate:
         sys.exit("Estimate only: nothing was embedded.")

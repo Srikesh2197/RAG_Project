@@ -2,12 +2,16 @@ PYTHON ?= python3
 VENV := .venv
 BIN := $(VENV)/bin
 
-.PHONY: setup data profile ingest app app-offline eval report test lint lock
+.PHONY: setup setup-local data profile ingest app app-offline eval report test lint lock
 
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/python -m pip install --upgrade pip
 	$(BIN)/python -m pip install -e ".[dev,frameworks]"
+
+# Stage 4: PyTorch and sentence-transformers, for embedding models run on this machine.
+setup-local:
+	$(BIN)/python -m pip install -e ".[local]"
 
 data:
 	$(BIN)/python scripts/download_data.py --config configs/data.yaml

@@ -11,7 +11,7 @@ import zlib
 
 import numpy as np
 
-from ragbasics.embedding.base import Embedded
+from ragbasics.embedding.base import Embedded, Kind
 from ragbasics.registry import register
 
 WORD = re.compile(r"\w+")
@@ -23,7 +23,7 @@ class HashingEmbedder:
         self.dimensions = dimensions
         self.model = f"hashing-{dimensions}"
 
-    def embed(self, texts: list[str]) -> Embedded:
+    def embed(self, texts: list[str], kind: Kind = "document") -> Embedded:
         vectors = np.zeros((len(texts), self.dimensions), dtype=np.float32)
         for row, text in enumerate(texts):
             for word in WORD.findall(text.lower()):

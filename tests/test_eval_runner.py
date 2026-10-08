@@ -315,6 +315,32 @@ def test_retrieval_table_shows_the_paired_difference_from_the_baseline(setup, mo
     assert f"{100 * diff.mean:+.1f} (" in other
 
 
+def test_retrieval_table_shows_the_difference_from_the_best_run_so_far(setup, monkeypatch):
+    run, tmp_path, pipeline_cfg, eval_cfg = setup
+    run(answers=False)
+    shallow = eval_cfg.model_copy(update={"depth": 1})
+    run_eval(pipeline_cfg.model_copy(update={"name": "shallow"}), shallow, answers=False,
+             runs_dir=tmp_path / "runs", log=lambda _: None)
+    runs = report.load_runs(tmp_path / "runs")
+    # No run is the best so far: the column is left out.
+    assert "vs best so far" not in report.results_markdown(runs)
+
+    monkeypatch.setattr(report, "BEST_RUN", "tiny")
+    monkeypatch.setattr(report, "PAIRED_BEST", [("recall@15tok", "recall vs best so far")])
+    by_id = {r["run_id"]: r for r in runs}
+    diff = report.compare(by_id["shallow"], by_id["tiny"], "recall@15tok")
+    table = report.results_markdown(runs)
+    lines = table.splitlines()
+    assert lines[0].count("`tiny`") == 1  # the note names the run
+    header = next(line for line in lines if line.startswith("| run |"))
+    assert header.endswith("| recall vs best so far |")
+    tiny = next(line for line in lines if line.startswith("| tiny |"))
+    other = next(line for line in lines if line.startswith("| shallow |"))
+    assert tiny.endswith("|  |")
+    assert other.endswith(f"| {100 * diff.mean:+.1f} ({100 * diff.low:+.1f} to "
+                          f"{100 * diff.high:+.1f}) |")
+
+
 def test_retrieval_only_does_not_overwrite_an_answer_run(setup):
     run, *_ = setup
     run()

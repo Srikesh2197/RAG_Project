@@ -13,6 +13,9 @@ from ragbasics.eval.stats import Interval, paired_bootstrap
 
 START, END = "<!-- results:start -->", "<!-- results:end -->"
 BASELINE_RUN = "baseline"
+# The best configuration so far: the run each stage changes one variable against.
+# Updated when a stage records a new best config.
+BEST_RUN = "chunk-recursive-128"
 
 # (metric key, column heading). Shares are shown as percentages.
 RETRIEVAL_COLUMNS = [
@@ -28,6 +31,10 @@ RETRIEVAL_COLUMNS = [
 PAIRED_RETRIEVAL = [
     ("recall@2000tok", "recall in 2,000 tok vs baseline"),
     ("precision@2000tok", "precision in 2,000 tok vs baseline"),
+]
+# And against the best run so far, for the metric a stage decides on.
+PAIRED_BEST = [
+    ("recall@2000tok", "recall in 2,000 tok vs best so far"),
 ]
 ANSWER_COLUMNS = [
     ("correct", "correct"),
@@ -117,6 +124,7 @@ def _markdown(header: list[str], rows: list[list[str]]) -> str:
 def results_markdown(runs: list[dict[str, Any]]) -> str:
     """Three tables: retrieval, answers, and answer correctness by question type."""
     baseline = next((run for run in runs if run["run_id"] == BASELINE_RUN), None)
+    best = next((run for run in runs if run["run_id"] == BEST_RUN), None)
     # A repeat (sample > 0) redraws only the answers; its retrieval is the same run's.
     retrieval = [run for run in runs if "recall@5" in run["metrics"] and not run["sample"]]
     answered = [run for run in runs if "correct" in run["metrics"]]
@@ -125,6 +133,11 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
         "\"vs baseline\" is the paired difference on the same questions; an interval that "
         "excludes 0 is a difference the question sample does not explain."
     ]
+    if best:
+        parts[0] += (
+            f" \"vs best so far\" is the same difference against `{BEST_RUN}`, the "
+            "configuration the current stage changes one variable in."
+        )
     if retrieval:
         n = retrieval[0]["metrics"]["recall@5"]["n"]
         parts += [
@@ -134,6 +147,7 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
                     "run",
                     *[heading for _, heading in RETRIEVAL_COLUMNS],
                     *[heading for _, heading in PAIRED_RETRIEVAL],
+                    *[heading for _, heading in PAIRED_BEST if best],
                 ],
                 [
                     [
@@ -144,6 +158,7 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
                             _versus(run, baseline, k, 2 if k.startswith("precision") else 1)
                             for k, _ in PAIRED_RETRIEVAL
                         ],
+                        *[_versus(run, best, k, 1) for k, _ in PAIRED_BEST if best],
                     ]
                     for run in retrieval
                 ],

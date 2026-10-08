@@ -1,0 +1,30 @@
+# Stage 4: bge-small-en-v1.5 cut to 96 of its 384 dimensions. It was not trained to be cut.
+# Differs from configs/stage03_chunking/recursive-128.yaml in the embedder only.
+name: embed-bge-small-96
+index_dir: data/index/embed-bge-small-96
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: local
+  params:
+    model: BAAI/bge-small-en-v1.5
+    revision: 5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
+    # The instruction the model card gives for queries. Passages get none.
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    dimensions: 96
+
+store:
+  name: numpy
+
+top_k: 5
+
+# Vectors already computed. A truncated length reuses the full vector, and the same
+# text always gets the same vector.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

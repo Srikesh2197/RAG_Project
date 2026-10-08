@@ -48,6 +48,10 @@ class PipelineConfig(StrictModel):
     # Search this many times deeper than asked, before chunks that return the same text
     # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.
     overfetch: int = Field(default=1, gt=0)
+    # A SQLite file of vectors already computed. With it, the same text always gets the
+    # same vector, and a truncated length reuses the full one. Not part of what the index
+    # depends on, so adding it to a config does not invalidate an index.
+    embedding_cache: Path | None = None
     generator: ComponentSpec
 
 

@@ -44,6 +44,12 @@ def test_repo_configs_load_and_build():
         cfg = load_config(path, PipelineConfig)
         Pipeline(cfg)
         assert cfg.name == f"chunk-{path.stem}" and cfg.name.startswith(cfg.index_dir.name)
+    for path in sorted((REPO_ROOT / "configs" / "stage04_embedding").glob("*.yaml")):
+        cfg = load_config(path, PipelineConfig)
+        Pipeline(cfg.model_copy(update={"embedding_cache": None}))  # loads no model
+        assert cfg.name == f"embed-{path.stem}" == cfg.index_dir.name
+        # One variable changes in Stage 4: the chunker is the best so far.
+        assert cfg.chunker.model_dump() == {"name": "recursive", "params": {"size": 128}}
 
 
 def test_ingest_then_ask_returns_a_full_trace(tmp_path):
