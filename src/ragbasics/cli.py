@@ -49,15 +49,31 @@ def found_by(trace: Trace, chunk_id: str) -> str:
     return ", ".join(parts)
 
 
+def moved_from(trace: Trace, chunk_id: str) -> str:
+    """'was 17' for a reranked chunk: its rank in the retriever's list before the
+    reranker. Empty when the trace has no reranking step."""
+    rank = next((c.rank for c in trace.retrieved if c.chunk.chunk_id == chunk_id), None)
+    return f"was {rank}" if rank else ""
+
+
 def format_trace(trace: Trace) -> str:
-    lines = [f"Answer: {trace.answer}", "", "Retrieved chunks:"]
+    title = "Retrieved chunks:"
+    if trace.rerank:
+        title = (
+            f"Retrieved chunks, top {trace.rerank['depth']} reranked by "
+            f"{trace.models.get('reranker')}:"
+        )
+    lines = [f"Answer: {trace.answer}", "", title]
     for c in trace.candidates:
         chunk = c.chunk
-        ranks = found_by(trace, chunk.chunk_id)
+        notes = ", ".join(
+            note for note in (moved_from(trace, chunk.chunk_id), found_by(trace, chunk.chunk_id))
+            if note
+        )
         lines.append(
             f"  {c.rank}. score {c.score:.3f}  {chunk.chunk_id} "
             f"[{chunk.start_char}:{chunk.end_char}]  {source_label(chunk.metadata)}"
-            + (f"  ({ranks})" if ranks else "")
+            + (f"  ({notes})" if notes else "")
         )
     timings = ", ".join(f"{step} {s * 1000:.0f} ms" for step, s in trace.timings.items())
     lines += ["", f"Time: {timings}", f"Tokens: {trace.usage}  Cost: ${trace.cost_usd:.4f}"]

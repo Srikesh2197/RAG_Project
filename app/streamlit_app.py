@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from ragbasics.cli import DEFAULT_DOCUMENTS, LEDGER, found_by, source_label
+from ragbasics.cli import DEFAULT_DOCUMENTS, LEDGER, found_by, moved_from, source_label
 from ragbasics.config import PipelineConfig, load_config
 from ragbasics.eval.dataset import read_documents
 from ragbasics.pipeline import Pipeline
@@ -58,12 +58,19 @@ def ingest_with_progress(pipeline: Pipeline, documents: list[Document]) -> None:
 
 def render_trace(trace: Trace) -> None:
     with st.expander(f"Retrieved chunks ({len(trace.candidates)})"):
+        if trace.rerank:
+            st.caption(
+                f"The retriever's top {trace.rerank['depth']} were reordered by "
+                f"{trace.models.get('reranker')}. Scores are the reranker's."
+            )
         for c in trace.candidates:
             chunk = c.chunk
             st.markdown(f"**{c.rank}. score {c.score:.3f}** · {source_label(chunk.metadata)}")
             ranks = found_by(trace, chunk.chunk_id)
+            moved = moved_from(trace, chunk.chunk_id)
             st.caption(
                 f"{chunk.chunk_id} · characters {chunk.start_char} to {chunk.end_char}"
+                + (f" · {moved} before reranking" if moved else "")
                 + (f" · rank in each retriever: {ranks}" if ranks else "")
             )
             st.text(chunk.text)

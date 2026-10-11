@@ -48,6 +48,11 @@ class PipelineConfig(StrictModel):
     # hybrid (both, fused). Every retriever ranks the chunks already in the store, so
     # this is not part of what the index depends on either.
     retriever: ComponentSpec = ComponentSpec(name="dense")
+    # A second stage that reads the question together with each of the retriever's top
+    # candidates and reorders them (Stage 6). None means the retriever's order is final.
+    # It reorders chunks the retriever returned, so it is not part of what the index
+    # depends on.
+    reranker: ComponentSpec | None = None
     top_k: int = Field(gt=0)
     # Search this many times deeper than asked, before chunks that return the same text
     # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.

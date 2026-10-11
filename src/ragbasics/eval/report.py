@@ -15,7 +15,7 @@ START, END = "<!-- results:start -->", "<!-- results:end -->"
 BASELINE_RUN = "baseline"
 # The best configuration so far: the run each stage changes one variable against.
 # Updated when a stage records a new best config.
-BEST_RUN = "retr-hybrid-rrf"
+BEST_RUN = "rerank-qwen3-100"
 
 # (metric key, column heading). Shares are shown as percentages.
 RETRIEVAL_COLUMNS = [

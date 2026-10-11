@@ -1,0 +1,47 @@
+# Stage 6: bge-reranker-v2-m3 (2024, 568M parameters, 2.3 GB), a cross-encoder run locally.
+# Differs from configs/stage05_retrieval/hybrid-rrf.yaml in the reranker only: the same
+# chunks, the same hybrid retriever, and a second stage that reorders its top 20.
+name: rerank-bge-v2-m3-20
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# The evaluator scores 50 chunks. A depth of 20 reorders the first 20 and leaves ranks
+# 21 to 50 as the retriever had them, so recall@50 cannot change.
+reranker:
+  name: cross_encoder
+  params:
+    model: BAAI/bge-reranker-v2-m3
+    revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
+    scoring: classifier
+    depth: 20
+    # A question is about 54 tokens and a chunk about 92, far under this limit.
+    max_length: 512
+    batch_size: 32
+    # Scores already computed. One pass at depth 100 also serves 20 and 50.
+    cache: data/cache/rerank.sqlite
+
+top_k: 5
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

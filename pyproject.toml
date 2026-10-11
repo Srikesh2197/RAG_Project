@@ -31,8 +31,9 @@ dev = [
     "ranx>=0.3.20",
     "ruff>=0.6",
 ]
-# Embedding models run on this machine (Stage 4). About 600 MB installed, so it is
-# not a base dependency; src/ imports it only when a "local" embedder is first used.
+# Embedding models (Stage 4) and rerankers (Stage 6) run on this machine. About 600 MB
+# installed, so it is not a base dependency; src/ imports it only when a "local" embedder
+# or a cross-encoder reranker is first used.
 local = [
     "sentence-transformers>=6.1",
     "torch>=2.14",

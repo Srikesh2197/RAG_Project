@@ -1,10 +1,11 @@
 """The pipeline: build components from a config, ingest documents, answer questions.
 
     Index time:  documents -> chunker -> embedder -> store (saved to disk)
-    Query time:  question -> retriever -> prompt -> generator -> Trace
+    Query time:  question -> retriever -> (reranker) -> prompt -> generator -> Trace
 
 The retriever is dense (embed the question, search the vectors), sparse (BM25 over the
-same chunks) or hybrid (both, fused).
+same chunks) or hybrid (both, fused). The optional reranker reads the question together
+with each of the retriever's top candidates and reorders them.
 """
 
 import time
@@ -23,6 +24,8 @@ import ragbasics.embedding.local
 import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
 import ragbasics.index.numpy_store
+import ragbasics.rerank.cross_encoder
+import ragbasics.rerank.llm_listwise
 import ragbasics.retrieval.dense
 import ragbasics.retrieval.hybrid
 import ragbasics.retrieval.sparse  # noqa: F401
@@ -91,6 +94,7 @@ class Pipeline:
             self.embedder.cache = EmbeddingCache(cfg.embedding_cache)
         self.store = _build("store", cfg.store)
         self.retriever = _build("retriever", cfg.retriever)
+        self.reranker = _build("reranker", cfg.reranker) if cfg.reranker else None
         self.generator = _build("generator", cfg.generator)
 
     # --- Index time ------------------------------------------------------------------
@@ -174,9 +178,14 @@ class Pipeline:
     # --- Query time ------------------------------------------------------------------
 
     def retrieve(self, question: str, k: int | None = None) -> Trace:
-        """Rank chunks for the question with the configured retriever. `k` defaults to
-        the config's `top_k`; the evaluator asks for more, to score ranks below the ones
-        that reach the prompt."""
+        """Rank chunks for the question: the configured retriever, then the reranker if
+        there is one. `k` defaults to the config's `top_k`; the evaluator asks for more,
+        to score ranks below the ones that reach the prompt."""
+        return self.rerank(self.first_stage(question, k), k)
+
+    def first_stage(self, question: str, k: int | None = None) -> Trace:
+        """The retriever's list, before any reranking. With a reranker it is as deep as
+        the reranker reads, when that is more than `k`."""
         if len(self.store) == 0:
             raise ValueError("The index is empty. Ingest documents first.")
         trace = Trace(
@@ -184,12 +193,45 @@ class Pipeline:
             models={"embedder": self.embedder.model, "generator": self.generator.model},
         )
         k = k or self.cfg.top_k
-        found = self.retriever.retrieve(question, k * self.cfg.overfetch, self)
-        trace.candidates = collapse_duplicates(found.candidates)[:k]
+        fetch = max(k, self.reranker.depth) if self.reranker else k
+        found = self.retriever.retrieve(question, fetch * self.cfg.overfetch, self)
+        trace.candidates = collapse_duplicates(found.candidates)[:fetch]
         trace.retrievers = found.lists
         trace.timings = found.timings
         trace.usage = {"embed_tokens": found.embed_tokens}
         trace.cost_usd = embedding_cost(self.embedder.model, found.embed_tokens)
+        return trace
+
+    def rerank(self, trace: Trace, k: int | None = None) -> Trace:
+        """Reorder the top `depth` candidates of a first-stage trace and cut to `k`.
+
+        Candidates below the reranker's depth keep their first-stage order underneath
+        the reranked ones. So a depth at or below `k` only reorders the top of the list,
+        and a depth above `k` can also bring in chunks the first stage ranked below `k`.
+        """
+        k = k or self.cfg.top_k
+        if self.reranker is None:
+            trace.candidates = trace.candidates[:k]
+            return trace
+        depth = self.reranker.depth
+        trace.retrieved = trace.candidates
+        result = self.reranker.rerank(trace.question, trace.retrieved[:depth])
+        tail = [
+            replace(candidate, rank=len(result.candidates) + i)
+            for i, candidate in enumerate(trace.retrieved[depth:], start=1)
+        ]
+        trace.candidates = (result.candidates + tail)[:k]
+        trace.models["reranker"] = self.reranker.model
+        trace.timings |= result.timings
+        trace.rerank = {"depth": depth, "cached": result.cached, **result.notes}
+        if result.input_tokens or result.output_tokens:
+            trace.usage |= {
+                "rerank_input_tokens": result.input_tokens,
+                "rerank_output_tokens": result.output_tokens,
+            }
+            trace.cost_usd += generation_cost(
+                self.reranker.model, result.input_tokens, result.output_tokens
+            )
         return trace
 
     def generate(self, trace: Trace, context: list[Chunk] | None) -> Trace:

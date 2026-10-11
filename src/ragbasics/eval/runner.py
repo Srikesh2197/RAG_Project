@@ -58,6 +58,11 @@ NULL_TYPE = "null_query"
 # Used only for the estimate printed before a run.
 ESTIMATED_ANSWER_TOKENS = 40
 ESTIMATED_JUDGE_OUTPUT_TOKENS = 150
+# An LLM reranker replies with one number per passage, "12 > 3 > 41 > ...", after
+# reasoning that is billed as output. Measured on gpt-6-luna at depth 20 (Stage 6):
+# about 770 output tokens per call, of which the ordering itself is about 100.
+ESTIMATED_RERANK_REASONING_TOKENS = 650
+ESTIMATED_RERANK_TOKENS_PER_PASSAGE = 6
 JUDGE_INSTRUCTION_TOKENS = 250
 
 
@@ -252,9 +257,31 @@ def run_eval(
             if not pipeline.load():
                 raise ValueError(f"No index in {pipeline.index_dir}. Run `rag ingest` first.")
             log(f"Retrieving {eval_cfg.depth} chunks for {len(questions)} questions…")
-            retrieved = _parallel(
-                lambda q: pipeline.retrieve(q.text, eval_cfg.depth), questions, eval_cfg.workers
+            first_stage = _parallel(
+                lambda q: pipeline.first_stage(q.text, eval_cfg.depth),
+                questions,
+                eval_cfg.workers,
             )
+            reranker = pipeline.reranker
+            if reranker is not None:
+                models["reranker"] = reranker.model
+                log(f"Reranking the top {reranker.depth} with {reranker.model}…")
+            if hasattr(reranker, "prompt"):
+                # An LLM reranker is paid per question, so its cost is printed first.
+                _confirm_rerank(
+                    reranker, first_stage, encoding, eval_cfg, confirmed, estimate_only, log
+                )
+            retrieved = _parallel(
+                lambda trace: pipeline.rerank(trace, eval_cfg.depth), first_stage, eval_cfg.workers
+            )
+            for trace in retrieved:
+                if "rerank_input_tokens" in trace.usage:
+                    bill(
+                        reranker.model,
+                        trace.rerank["cached"],
+                        trace.usage["rerank_input_tokens"],
+                        trace.usage["rerank_output_tokens"],
+                    )
             traces = {q.question_id: t for q, t in zip(questions, retrieved, strict=True)}
             total_relevant = count_relevant(pipeline.store.chunks, questions)
             embed_tokens = sum(t.usage["embed_tokens"] for t in retrieved)
@@ -273,6 +300,17 @@ def run_eval(
                         name: [[c.chunk.chunk_id, round(c.score, 4)] for c in found[:depth]]
                         for name, found in trace.retrievers.items()
                     }
+                if trace.retrieved:
+                    # Reranked: the list as the retriever left it, so a run shows what
+                    # the reranker moved.
+                    row["before_rerank"] = [
+                        [c.chunk.chunk_id, round(c.score, 4)] for c in trace.retrieved
+                    ]
+                    row["rerank"] = trace.rerank
+                    if q.evidence:
+                        row["gold_ranks_before"] = rm.gold_ranks(
+                            [c.chunk for c in trace.retrieved], q.evidence
+                        )
                 if q.evidence:
                     row["gold_ranks"] = rm.gold_ranks(chunks, q.evidence)
                     row["scores"] |= score_retrieval(
@@ -472,6 +510,50 @@ def run_eval(
                 append_ledger(ledger, step, model, int(tokens_in), int(tokens_out), dollars)
     log(f"Billed this run: ${spent:.4f}. Wrote {out}/")
     return out
+
+
+def _confirm_rerank(
+    reranker: Any,
+    traces: list[Trace],
+    encoding: Any,
+    eval_cfg: EvalConfig,
+    confirmed: bool,
+    estimate_only: bool,
+    log: Callable[[str], None],
+) -> None:
+    """Print what an LLM reranker will cost for these questions, and stop if the caller
+    asked only for the estimate or the cost is above the limit and unconfirmed."""
+    from ragbasics.rerank.llm_listwise import SYSTEM_PROMPT as RERANK_SYSTEM
+
+    def tokens(text: str) -> int:
+        return len(encoding.encode(text, disallowed_special=()))
+
+    calls = tokens_in = tokens_out = 0
+    for trace in traces:
+        candidates = trace.candidates[: reranker.depth]
+        if candidates and not reranker.is_cached(trace.question, candidates):
+            calls += 1
+            tokens_in += tokens(RERANK_SYSTEM) + tokens(reranker.prompt(trace.question, candidates))
+            tokens_out += (
+                ESTIMATED_RERANK_REASONING_TOKENS
+                + ESTIMATED_RERANK_TOKENS_PER_PASSAGE * len(candidates)
+            )
+    if reranker.model.startswith("claude"):
+        tokens_in = int(tokens_in * CLAUDE_TOKENS_PER_CL100K)
+    estimate = generation_cost(reranker.model, tokens_in, tokens_out)
+    log(
+        f"Estimated reranking cost: ${estimate:.2f}. {reranker.model}: {calls} new calls of "
+        f"{len(traces)}, about {tokens_in:,} tokens in and {tokens_out:,} out."
+    )
+    if not calls:
+        return
+    if estimate_only:
+        raise EstimateOnly("Estimate only: nothing was reranked.")
+    if estimate > eval_cfg.confirm_above_usd and not confirmed:
+        raise ConfirmationNeeded(
+            f"The estimate is above ${eval_cfg.confirm_above_usd:.2f}. "
+            "Run again with --yes to go ahead."
+        )
 
 
 def _spec(eval_cfg: EvalConfig) -> dict[str, Any]:

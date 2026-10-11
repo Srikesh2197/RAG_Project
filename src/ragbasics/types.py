@@ -74,8 +74,9 @@ class Candidate:
     chunk: Chunk
     score: float
     rank: int
-    # Which retriever produced this rank and score: "dense", "sparse" or "hybrid". The
-    # score's scale depends on it (a cosine, a BM25 score, a fused score).
+    # Which step produced this rank and score: "dense", "sparse", "hybrid" or "rerank".
+    # The score's scale depends on it (a cosine, a BM25 score, a fused score, a
+    # reranker's score).
     retriever: str = "dense"
 
 
@@ -93,6 +94,13 @@ class Trace:
     # ranks. One entry for dense or sparse search; two for hybrid, where `candidates`
     # is the fused list. Shows which retriever found what.
     retrievers: dict[str, list[Candidate]] = field(default_factory=dict)
+    # With a reranker: the retriever's final list as it was before reranking, down to
+    # the depth the reranker read or the number of chunks asked for, whichever is
+    # larger. `candidates` is then the list after reranking. Empty without a reranker.
+    retrieved: list[Candidate] = field(default_factory=list)
+    # What the reranker reported: its depth, whether its scores came from the cache,
+    # pairs it had to truncate, repairs to an LLM's ordering.
+    rerank: dict[str, Any] = field(default_factory=dict)
     # The chunks pasted into the prompt. Usually the top of `candidates`; the evaluator
     # retrieves deeper than it prompts, and can also supply gold evidence or nothing.
     context: list[Chunk] = field(default_factory=list)

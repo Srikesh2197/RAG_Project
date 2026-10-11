@@ -1,0 +1,44 @@
+# Stage 6: a listwise LLM reranker: one prompt with the question and every candidate.
+# Differs from configs/stage05_retrieval/hybrid-rrf.yaml in the reranker only: the same
+# chunks, the same hybrid retriever, and a second stage that reorders its top 20.
+name: rerank-llm-luna-20
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# The evaluator scores 50 chunks. A depth of 20 reorders the first 20 and leaves ranks
+# 21 to 50 as the retriever had them, so recall@50 cannot change.
+reranker:
+  name: llm_listwise
+  params:
+    # The cheapest tier. It is also the judge's model, which matters only for an
+    # answer-quality run made behind this reranker.
+    generator: {name: openai, params: {model: gpt-6-luna, max_tokens: 4000}}
+    depth: 20
+    # A repeated prompt is read from the LLM cache and not paid for again.
+    cache: data/cache/llm.sqlite
+
+top_k: 5
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

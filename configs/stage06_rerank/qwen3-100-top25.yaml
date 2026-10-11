@@ -1,0 +1,49 @@
+# Stage 6: Qwen3-Reranker-0.6B (2025, 0.6B parameters, 1.2 GB), a language model scored on yes against no, run locally.
+# The best config so far, with 25 chunks in the prompt: qwen3-100.yaml with top_k 25,
+# for an answer-quality run and the app. It differs from
+# configs/stage05_retrieval/hybrid-rrf-top25.yaml in the reranker only.
+name: rerank-qwen3-100-top25
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# The evaluator scores 50 chunks. A depth of 100 can bring chunks the retriever ranked
+# 51 to 100 into them, so recall@50 can change.
+reranker:
+  name: cross_encoder
+  params:
+    model: Qwen/Qwen3-Reranker-0.6B
+    revision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+    scoring: yes_no
+    depth: 100
+    # A question is about 54 tokens and a chunk about 92, far under this limit.
+    max_length: 512
+    batch_size: 32
+    # Scores already computed. One pass at depth 100 also serves 20 and 50.
+    cache: data/cache/rerank.sqlite
+
+# 25 chunks of about 92 tokens. A placeholder: Stage 8 chooses the number of chunks.
+top_k: 25
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

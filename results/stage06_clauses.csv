@@ -1,0 +1,53 @@
+table,order,depth,question_type,metric,value,questions
+minilm:separation,first stage,100,all,,0.8715,437
+minilm:separation,first stage,100,comparison,,0.9087,210
+minilm:separation,first stage,100,inference,,0.8535,105
+minilm:separation,first stage,100,temporal,,0.823,122
+minilm:separation,full,100,all,,0.7791,437
+minilm:separation,full,100,comparison,,0.8076,210
+minilm:separation,full,100,inference,,0.709,105
+minilm:separation,full,100,temporal,,0.7904,122
+minilm:separation,best clause,100,all,,0.8851,437
+minilm:separation,best clause,100,comparison,,0.9141,210
+minilm:separation,best clause,100,inference,,0.8818,105
+minilm:separation,best clause,100,temporal,,0.838,122
+minilm:separation,round robin,100,all,,0.8966,437
+minilm:separation,round robin,100,comparison,,0.9266,210
+minilm:separation,round robin,100,inference,,0.8959,105
+minilm:separation,round robin,100,temporal,,0.8455,122
+minilm:metrics,full,20,all,recall@2000tok,0.722,441
+minilm:metrics,full,20,all,ndcg@10,0.43,441
+minilm:metrics,full,20,all,full_support@10,0.2109,441
+minilm:metrics,full,20,all,mrr@10,0.5742,441
+minilm:metrics,best clause,20,all,recall@2000tok,0.7254,441
+minilm:metrics,best clause,20,all,ndcg@10,0.5525,441
+minilm:metrics,best clause,20,all,full_support@10,0.4059,441
+minilm:metrics,best clause,20,all,mrr@10,0.6537,441
+minilm:metrics,round robin,20,all,recall@2000tok,0.7288,441
+minilm:metrics,round robin,20,all,ndcg@10,0.526,441
+minilm:metrics,round robin,20,all,full_support@10,0.3991,441
+minilm:metrics,round robin,20,all,mrr@10,0.5707,441
+minilm:metrics,full,50,all,recall@2000tok,0.6,441
+minilm:metrics,full,50,all,ndcg@10,0.4126,441
+minilm:metrics,full,50,all,full_support@10,0.1542,441
+minilm:metrics,full,50,all,mrr@10,0.5747,441
+minilm:metrics,best clause,50,all,recall@2000tok,0.7417,441
+minilm:metrics,best clause,50,all,ndcg@10,0.5551,441
+minilm:metrics,best clause,50,all,full_support@10,0.4218,441
+minilm:metrics,best clause,50,all,mrr@10,0.6567,441
+minilm:metrics,round robin,50,all,recall@2000tok,0.7596,441
+minilm:metrics,round robin,50,all,ndcg@10,0.5384,441
+minilm:metrics,round robin,50,all,full_support@10,0.4354,441
+minilm:metrics,round robin,50,all,mrr@10,0.5728,441
+minilm:metrics,full,100,all,recall@2000tok,0.5763,441
+minilm:metrics,full,100,all,ndcg@10,0.4099,441
+minilm:metrics,full,100,all,full_support@10,0.1429,441
+minilm:metrics,full,100,all,mrr@10,0.5751,441
+minilm:metrics,best clause,100,all,recall@2000tok,0.7468,441
+minilm:metrics,best clause,100,all,ndcg@10,0.5517,441
+minilm:metrics,best clause,100,all,full_support@10,0.4127,441
+minilm:metrics,best clause,100,all,mrr@10,0.6536,441
+minilm:metrics,round robin,100,all,recall@2000tok,0.768,441
+minilm:metrics,round robin,100,all,ndcg@10,0.5389,441
+minilm:metrics,round robin,100,all,full_support@10,0.4376,441
+minilm:metrics,round robin,100,all,mrr@10,0.5729,441

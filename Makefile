@@ -9,7 +9,8 @@ setup:
 	$(BIN)/python -m pip install --upgrade pip
 	$(BIN)/python -m pip install -e ".[dev,frameworks]"
 
-# Stage 4: PyTorch and sentence-transformers, for embedding models run on this machine.
+# Stages 4 and 6: PyTorch and sentence-transformers, for embedding models and rerankers
+# run on this machine.
 setup-local:
 	$(BIN)/python -m pip install -e ".[local]"
 
