@@ -17,7 +17,9 @@ from ragbasics.types import Candidate
 NORMALISERS = ("minmax", "zscore")
 
 
-def _ordered(scores: dict[str, float], lists: dict[str, list[Candidate]]) -> list[Candidate]:
+def _ordered(
+    scores: dict[str, float], lists: dict[str, list[Candidate]], label: str = "hybrid"
+) -> list[Candidate]:
     """Candidates sorted by fused score. Equal scores keep the order chunks were first
     seen in (the first list, then the second), so results are deterministic."""
     chunks = {}
@@ -26,13 +28,16 @@ def _ordered(scores: dict[str, float], lists: dict[str, list[Candidate]]) -> lis
             chunks.setdefault(candidate.chunk.chunk_id, candidate.chunk)
     order = sorted(chunks, key=lambda chunk_id: -scores[chunk_id])
     return [
-        Candidate(chunk=chunks[chunk_id], score=scores[chunk_id], rank=rank, retriever="hybrid")
+        Candidate(chunk=chunks[chunk_id], score=scores[chunk_id], rank=rank, retriever=label)
         for rank, chunk_id in enumerate(order, start=1)
     ]
 
 
 def reciprocal_rank_fusion(
-    lists: dict[str, list[Candidate]], k: float = 60, weights: dict[str, float] | None = None
+    lists: dict[str, list[Candidate]],
+    k: float = 60,
+    weights: dict[str, float] | None = None,
+    label: str = "hybrid",
 ) -> list[Candidate]:
     """Each list gives a chunk 1 / (k + rank); a chunk's fused score is the sum.
 
@@ -47,7 +52,33 @@ def reciprocal_rank_fusion(
         for candidate in candidates:
             chunk_id = candidate.chunk.chunk_id
             scores[chunk_id] = scores.get(chunk_id, 0.0) + weight / (k + candidate.rank)
-    return _ordered(scores, lists)
+    return _ordered(scores, lists, label)
+
+
+def round_robin(lists: dict[str, list[Candidate]], label: str = "hybrid") -> list[Candidate]:
+    """Every list's first choice, then every list's second, and so on; a chunk already
+    taken is skipped.
+
+    Reciprocal rank fusion rewards a chunk that several lists found. That suits lists
+    that are after the same chunks (two retrievers, or paraphrases of one question). The
+    lists of a question's sub-questions are after different chunks, and a chunk only one
+    of them wants can be the evidence for its part. Round robin gives every list the
+    same share of the top without asking the lists to agree.
+
+    There is no score to carry over, only a position. `Candidate.score` is 1 / rank, so
+    that a higher score still means a better chunk.
+    """
+    seen: set[str] = set()
+    out: list[Candidate] = []
+    for position in range(max((len(found) for found in lists.values()), default=0)):
+        for found in lists.values():
+            if position < len(found) and found[position].chunk.chunk_id not in seen:
+                seen.add(found[position].chunk.chunk_id)
+                rank = len(out) + 1
+                out.append(
+                    Candidate(found[position].chunk, score=1.0 / rank, rank=rank, retriever=label)
+                )
+    return out
 
 
 def normalise(scores: list[float], method: str) -> list[float]:

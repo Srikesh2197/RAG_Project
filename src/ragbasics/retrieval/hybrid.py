@@ -3,6 +3,7 @@
 import time
 from typing import Any
 
+from ragbasics.embedding.base import Kind
 from ragbasics.registry import register
 from ragbasics.retrieval.base import Index, Retrieval
 from ragbasics.retrieval.dense import DenseRetriever
@@ -54,9 +55,9 @@ class HybridRetriever:
         weights = {"dense": self.weight, "sparse": 1 - self.weight}
         return weighted_fusion(lists, weights, self.normalise)
 
-    def retrieve(self, question: str, k: int, index: Index) -> Retrieval:
+    def retrieve(self, question: str, k: int, index: Index, kind: Kind = "query") -> Retrieval:
         depth = max(self.depth, k)
-        dense = self.dense.retrieve(question, depth, index)
+        dense = self.dense.retrieve(question, depth, index, kind)
         sparse = self.sparse.retrieve(question, depth, index)
         t0 = time.perf_counter()
         lists = {"dense": dense.candidates, "sparse": sparse.candidates}

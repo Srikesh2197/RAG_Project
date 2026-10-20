@@ -1,0 +1,57 @@
+# Stage 7: an LLM writes one sub-question per fact the question needs; the reranker scores against the parts.
+# Differs from configs/stage06_rerank/qwen3-50.yaml in what the reranker scores each
+# candidate against, and in nothing else. One reranking pass per part.
+name: query-decompose-rerank-split-50
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+reranker:
+  name: cross_encoder
+  params:
+    model: Qwen/Qwen3-Reranker-0.6B
+    revision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+    scoring: yes_no
+    depth: 50
+    max_length: 512
+    batch_size: 32
+    cache: data/cache/rerank.sqlite
+
+query_transform:
+  name: decompose
+  params:
+    # The retriever searches with the question as asked, so the candidates are
+    # exactly those of the row this is compared with.
+    # The reranker scores each candidate against every part of the question in turn.
+    retrieve_with: original
+    rerank_with: queries
+    rerank_combine: round_robin
+    max_queries: 4
+    generator: {name: openai, params: {model: gpt-6-luna, max_tokens: 2000}}
+    # A repeated question is read from the LLM cache and not paid for again.
+    cache: data/cache/llm.sqlite
+
+top_k: 5
+
+# Vectors of questions and queries already computed, so a repeat costs nothing.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

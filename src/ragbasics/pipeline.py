@@ -1,11 +1,15 @@
 """The pipeline: build components from a config, ingest documents, answer questions.
 
     Index time:  documents -> chunker -> embedder -> store (saved to disk)
-    Query time:  question -> retriever -> (reranker) -> prompt -> generator -> Trace
+    Query time:  question -> (query transformation) -> retriever -> (reranker)
+                 -> prompt -> generator -> Trace
 
 The retriever is dense (embed the question, search the vectors), sparse (BM25 over the
 same chunks) or hybrid (both, fused). The optional reranker reads the question together
-with each of the retriever's top candidates and reorders them.
+with each of the retriever's top candidates and reorders them. The optional query
+transformation turns the question into one or more queries first; the retriever then
+runs once per query and the lists are combined. The generator always answers the
+question as asked.
 """
 
 import time
@@ -24,6 +28,9 @@ import ragbasics.embedding.local
 import ragbasics.embedding.openai_embedder
 import ragbasics.generation.llm
 import ragbasics.index.numpy_store
+import ragbasics.query.clauses
+import ragbasics.query.followup
+import ragbasics.query.llm
 import ragbasics.rerank.cross_encoder
 import ragbasics.rerank.llm_listwise
 import ragbasics.retrieval.dense
@@ -38,8 +45,12 @@ from ragbasics.context.prompts import (
 )
 from ragbasics.costs import append_ledger, embedding_cost, generation_cost
 from ragbasics.embedding.cache import EmbeddingCache
+from ragbasics.query.base import route
+from ragbasics.query.followup import Turn
 from ragbasics.registry import build
-from ragbasics.types import Candidate, Chunk, Document, Trace
+from ragbasics.rerank.base import merge
+from ragbasics.retrieval.fusion import reciprocal_rank_fusion, round_robin
+from ragbasics.types import Candidate, Chunk, Document, Query, Trace
 
 EMBED_BATCH = 100  # chunks per embedding request
 
@@ -95,6 +106,10 @@ class Pipeline:
         self.store = _build("store", cfg.store)
         self.retriever = _build("retriever", cfg.retriever)
         self.reranker = _build("reranker", cfg.reranker) if cfg.reranker else None
+        self.transformer = (
+            _build("query_transform", cfg.query_transform) if cfg.query_transform else None
+        )
+        self.followup = _build("followup", cfg.followup) if cfg.followup else None
         self.generator = _build("generator", cfg.generator)
 
     # --- Index time ------------------------------------------------------------------
@@ -194,13 +209,72 @@ class Pipeline:
         )
         k = k or self.cfg.top_k
         fetch = max(k, self.reranker.depth) if self.reranker else k
-        found = self.retriever.retrieve(question, fetch * self.cfg.overfetch, self)
-        trace.candidates = collapse_duplicates(found.candidates)[:fetch]
-        trace.retrievers = found.lists
-        trace.timings = found.timings
-        trace.usage = {"embed_tokens": found.embed_tokens}
-        trace.cost_usd = embedding_cost(self.embedder.model, found.embed_tokens)
+        searches = self.transform(trace) if self.transformer else [Query(question)]
+        # Several lists are fetched deeper than one would be, before they are combined.
+        each = max(fetch, self.transformer.depth) if len(searches) > 1 else fetch
+        # One search per query. A made-up answer passage is embedded as a passage.
+        found = [
+            self.retriever.retrieve(
+                query.text,
+                each * self.cfg.overfetch,
+                self,
+                kind="document" if query.role == "hypothetical" else "query",
+            )
+            for query in searches
+        ]
+        for result in found:
+            for step, seconds in result.timings.items():
+                trace.timings[step] = trace.timings.get(step, 0.0) + seconds
+        if len(found) == 1:
+            candidates = found[0].candidates
+            trace.retrievers = found[0].lists
+        else:
+            t0 = time.perf_counter()
+            lists = {str(i): result.candidates for i, result in enumerate(found)}
+            if self.transformer.combine_method == "rrf":
+                candidates = reciprocal_rank_fusion(
+                    lists, self.transformer.combine_k, label="queries"
+                )
+            else:
+                candidates = round_robin(lists, label="queries")
+            trace.timings["combine"] = time.perf_counter() - t0
+        trace.candidates = collapse_duplicates(candidates)[:fetch]
+        if self.transformer:
+            trace.query_lists = [collapse_duplicates(r.candidates)[:fetch] for r in found]
+        embed_tokens = sum(result.embed_tokens for result in found)
+        trace.usage["embed_tokens"] = embed_tokens
+        trace.cost_usd += embedding_cost(self.embedder.model, embed_tokens)
         return trace
+
+    def transform(self, trace: Trace) -> list[Query]:
+        """Run the query transformation and record it in the trace. Returns the queries
+        the retriever searches with; the ones the reranker scores against are kept in
+        the trace for `rerank`."""
+        transformer = self.transformer
+        result = transformer.transform(trace.question)
+        trace.queries = route(trace.question, result.queries, transformer.retrieve_with)
+        trace.rerank_queries = route(trace.question, result.queries, transformer.rerank_with)
+        trace.transform = {
+            "name": transformer.name,
+            "retrieve_with": transformer.retrieve_with,
+            "rerank_with": transformer.rerank_with,
+            "calls": result.calls,
+            "cached": result.cached,
+            **result.notes,
+        }
+        if len(trace.queries) > 1:
+            trace.transform["combine"] = transformer.combine_method
+        trace.models["transformer"] = transformer.model
+        trace.timings |= result.timings
+        if result.calls:
+            trace.usage |= {
+                "transform_input_tokens": result.input_tokens,
+                "transform_output_tokens": result.output_tokens,
+            }
+            trace.cost_usd += generation_cost(
+                transformer.model, result.input_tokens, result.output_tokens
+            )
+        return trace.queries
 
     def rerank(self, trace: Trace, k: int | None = None) -> Trace:
         """Reorder the top `depth` candidates of a first-stage trace and cut to `k`.
@@ -215,7 +289,15 @@ class Pipeline:
             return trace
         depth = self.reranker.depth
         trace.retrieved = trace.candidates
-        result = self.reranker.rerank(trace.question, trace.retrieved[:depth])
+        head = trace.retrieved[:depth]
+        # One pass per query the reranker scores against: the question, or with a
+        # transformation that says so, each sub-question.
+        queries = trace.rerank_queries or [Query(trace.question)]
+        results = [self.reranker.rerank(query.text, head) for query in queries]
+        if len(results) == 1:
+            result = results[0]
+        else:
+            result = merge(head, results, self.transformer.rerank_combine)
         tail = [
             replace(candidate, rank=len(result.candidates) + i)
             for i, candidate in enumerate(trace.retrieved[depth:], start=1)
@@ -264,8 +346,25 @@ class Pipeline:
         )
         return trace
 
-    def ask(self, question: str) -> Trace:
-        trace = self.retrieve(question)
+    def ask(self, question: str, history: list[Turn] | None = None) -> Trace:
+        """Answer one question. `history` is the chat so far as (question, answer)
+        pairs; with a follow-up rewriter configured, a message that leans on it is
+        first rewritten into a question that stands on its own."""
+        standalone = None
+        if self.followup is not None and history:
+            standalone = self.followup.rewrite(history, question)
+        trace = self.retrieve(standalone.question if standalone else question)
+        if standalone:
+            trace.asked = question
+            trace.models["followup"] = self.followup.model
+            trace.timings = standalone.timings | trace.timings
+            trace.usage |= {
+                "followup_input_tokens": standalone.input_tokens,
+                "followup_output_tokens": standalone.output_tokens,
+            }
+            trace.cost_usd += generation_cost(
+                self.followup.model, standalone.input_tokens, standalone.output_tokens
+            )
         trace = self.generate(trace, [c.chunk for c in trace.candidates])
         if self.ledger and trace.cost_usd:
             append_ledger(

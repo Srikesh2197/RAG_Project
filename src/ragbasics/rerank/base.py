@@ -58,3 +58,50 @@ def reorder(candidates: list[Candidate], scores: list[float], name: str) -> list
         Candidate(chunk=candidates[i].chunk, score=scores[i], rank=rank, retriever=name)
         for rank, i in enumerate(order, start=1)
     ]
+
+
+def merge(candidates: list[Candidate], results: list[Reranked], method: str) -> Reranked:
+    """One ordering from several: the same candidates reranked against each of several
+    queries (the sub-questions of a question, Stage 7).
+
+    round_robin  every query's first choice, then every query's second, and so on.
+                 Scores are never compared across queries.
+    max          a chunk's best score over the queries. One query can score everything
+                 higher than another, and then it decides the order.
+
+    Ties and repeats resolve in the order the queries were given.
+    """
+    if method == "max":
+        best: dict[str, float] = {}
+        for result in results:
+            for c in result.candidates:
+                best[c.chunk.chunk_id] = max(c.score, best.get(c.chunk.chunk_id, c.score))
+        merged = reorder(candidates, [best[c.chunk.chunk_id] for c in candidates], "rerank")
+    elif method == "round_robin":
+        # Imported here for the same reason as in `passage_text`.
+        from ragbasics.retrieval.fusion import round_robin
+
+        merged = round_robin({str(i): r.candidates for i, r in enumerate(results)}, "rerank")
+    else:
+        raise ValueError(f"unknown way to merge reranked lists: '{method}'")
+    timings: dict[str, float] = {}
+    notes: dict[str, Any] = {}
+    for result in results:
+        for step, seconds in result.timings.items():
+            timings[step] = timings.get(step, 0.0) + seconds
+        for key, value in result.notes.items():
+            # Counts add up, flags stay set, and anything else keeps its last value.
+            if isinstance(value, bool):
+                notes[key] = notes.get(key, False) or value
+            elif isinstance(value, int | float):
+                notes[key] = notes.get(key, 0) + value
+            else:
+                notes[key] = value
+    return Reranked(
+        candidates=merged,
+        timings=timings,
+        input_tokens=sum(r.input_tokens for r in results),
+        output_tokens=sum(r.output_tokens for r in results),
+        cached=all(r.cached for r in results),
+        notes=notes | {"queries": len(results), "combine": method},
+    )

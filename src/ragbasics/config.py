@@ -53,6 +53,14 @@ class PipelineConfig(StrictModel):
     # It reorders chunks the retriever returned, so it is not part of what the index
     # depends on.
     reranker: ComponentSpec | None = None
+    # A step before retrieval that turns the question into one or more queries: a
+    # rewrite, several phrasings, a made-up answer passage, or sub-questions (Stage 7).
+    # None means the question is the only query. It changes what is searched with and
+    # not what is indexed, so it is not part of what the index depends on either.
+    query_transform: ComponentSpec | None = None
+    # In a chat, rewrites a message that leans on earlier turns into a question that
+    # stands on its own (Stage 7). None means every message is taken as it is.
+    followup: ComponentSpec | None = None
     top_k: int = Field(gt=0)
     # Search this many times deeper than asked, before chunks that return the same text
     # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.

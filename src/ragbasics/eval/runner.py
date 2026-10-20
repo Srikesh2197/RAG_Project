@@ -33,6 +33,7 @@ from ragbasics.context.prompts import (
 )
 from ragbasics.costs import (
     CLAUDE_TOKENS_PER_CL100K,
+    Meter,
     append_ledger,
     embedding_cost,
     generation_cost,
@@ -179,14 +180,8 @@ def run_eval(
     eval_cfg: EvalConfig,
     mode: str = "retrieved",
     sample: int = 0,
-    answers: bool = True,
-    confirmed: bool = False,
-    estimate_only: bool = False,
-    allow_test: bool = False,
-    runs_dir: Path = Path("runs"),
     ledger: Path | None = None,
-    judge: Generator | None = None,
-    log: Callable[[str], None] = print,
+    **options: Any,
 ) -> Path:
     """Evaluate one pipeline in one mode. Returns the run directory.
 
@@ -194,7 +189,43 @@ def run_eval(
     an independent repeat of the generator calls. `judge` replaces the configured judge
     (tests pass a stub). `estimate_only=True` stops after printing the cost estimate,
     before any generator or judge call.
+
+    The ledger is written when the run finishes. If the run stops before that, for any
+    reason, whatever it had already paid for is written here, marked as an aborted run:
+    those calls are in the cache and will not be billed again, so this is the only
+    record of them.
     """
+    spend: dict[str, list[float]] = {}  # model -> [input tokens, output tokens, dollars] billed
+    meters: list[Meter] = []  # calls counted as they complete, not yet in `spend`
+    try:
+        return _run_eval(pipeline_cfg, eval_cfg, mode, sample, ledger, spend, meters, **options)
+    except BaseException:
+        if ledger:
+            step = f"eval:{run_id(pipeline_cfg.name, mode, sample)} (aborted run)"
+            for model, (tokens_in, tokens_out, dollars) in spend.items():
+                if dollars:
+                    append_ledger(ledger, step, model, int(tokens_in), int(tokens_out), dollars)
+            for meter in meters:
+                meter.flush(ledger, step)
+        raise
+
+
+def _run_eval(
+    pipeline_cfg: PipelineConfig,
+    eval_cfg: EvalConfig,
+    mode: str,
+    sample: int,
+    ledger: Path | None,
+    spend: dict[str, list[float]],
+    meters: list[Meter],
+    answers: bool = True,
+    confirmed: bool = False,
+    estimate_only: bool = False,
+    allow_test: bool = False,
+    runs_dir: Path = Path("runs"),
+    judge: Generator | None = None,
+    log: Callable[[str], None] = print,
+) -> Path:
     if mode not in MODES:
         raise ValueError(f"unknown mode '{mode}'; choose from {MODES}")
     if eval_cfg.questions.name.startswith("questions_test") and not allow_test:
@@ -226,7 +257,6 @@ def run_eval(
         for q in questions
     }
     models: dict[str, str] = {}
-    spend: dict[str, list[float]] = {}  # model -> [input tokens, output tokens, dollars] billed
 
     def bill(model: str, cached: bool, tokens_in: int, tokens_out: int) -> None:
         if cached:
@@ -256,6 +286,18 @@ def run_eval(
         if mode == "retrieved":
             if not pipeline.load():
                 raise ValueError(f"No index in {pipeline.index_dir}. Run `rag ingest` first.")
+            transformer = pipeline.transformer
+            if transformer is not None:
+                models["transformer"] = transformer.model
+                log(f"Transforming each question with '{transformer.name}' "
+                    f"({transformer.model})…")
+            if hasattr(transformer, "is_cached"):
+                # An LLM transformation is paid per question, so its cost is printed
+                # first. Its calls are also counted as they complete.
+                _confirm_transform(
+                    transformer, questions, encoding, eval_cfg, confirmed, estimate_only, log
+                )
+                meters.append(transformer.meter)
             log(f"Retrieving {eval_cfg.depth} chunks for {len(questions)} questions…")
             first_stage = _parallel(
                 lambda q: pipeline.first_stage(q.text, eval_cfg.depth),
@@ -274,6 +316,16 @@ def run_eval(
             retrieved = _parallel(
                 lambda trace: pipeline.rerank(trace, eval_cfg.depth), first_stage, eval_cfg.workers
             )
+            for trace in first_stage:
+                if "transform_input_tokens" in trace.usage:
+                    bill(
+                        transformer.model,
+                        trace.transform["cached"],
+                        trace.usage["transform_input_tokens"],
+                        trace.usage["transform_output_tokens"],
+                    )
+            if meters:
+                meters[0].reset()  # the same calls are now in `spend`
             for trace in retrieved:
                 if "rerank_input_tokens" in trace.usage:
                     bill(
@@ -293,6 +345,20 @@ def run_eval(
                 trace, row = traces[q.question_id], rows[q.question_id]
                 chunks = [c.chunk for c in trace.candidates]
                 row["retrieved"] = [[c.chunk.chunk_id, round(c.score, 4)] for c in trace.candidates]
+                if trace.transform:
+                    # Transformed: what was searched with, what the reranker scored
+                    # against, and each query's own list, so a run shows what the
+                    # transformation did.
+                    row["transform"] = trace.transform
+                    row["queries"] = [[query.role, query.text] for query in trace.queries]
+                    row["rerank_queries"] = [
+                        [query.role, query.text] for query in trace.rerank_queries
+                    ]
+                    if len(trace.query_lists) > 1:
+                        row["by_query"] = [
+                            [[c.chunk.chunk_id, round(c.score, 4)] for c in found[:depth]]
+                            for found in trace.query_lists
+                        ]
                 if len(trace.retrievers) > 1:
                     # Hybrid: each retriever's own list, to the depth that is scored, so
                     # a run shows which retriever found what.
@@ -531,13 +597,15 @@ def _confirm_rerank(
     calls = tokens_in = tokens_out = 0
     for trace in traces:
         candidates = trace.candidates[: reranker.depth]
-        if candidates and not reranker.is_cached(trace.question, candidates):
-            calls += 1
-            tokens_in += tokens(RERANK_SYSTEM) + tokens(reranker.prompt(trace.question, candidates))
-            tokens_out += (
-                ESTIMATED_RERANK_REASONING_TOKENS
-                + ESTIMATED_RERANK_TOKENS_PER_PASSAGE * len(candidates)
-            )
+        # One call per query the reranker scores against (Stage 7); usually one.
+        for query in [q.text for q in trace.rerank_queries] or [trace.question]:
+            if candidates and not reranker.is_cached(query, candidates):
+                calls += 1
+                tokens_in += tokens(RERANK_SYSTEM) + tokens(reranker.prompt(query, candidates))
+                tokens_out += (
+                    ESTIMATED_RERANK_REASONING_TOKENS
+                    + ESTIMATED_RERANK_TOKENS_PER_PASSAGE * len(candidates)
+                )
     if reranker.model.startswith("claude"):
         tokens_in = int(tokens_in * CLAUDE_TOKENS_PER_CL100K)
     estimate = generation_cost(reranker.model, tokens_in, tokens_out)
@@ -549,6 +617,44 @@ def _confirm_rerank(
         return
     if estimate_only:
         raise EstimateOnly("Estimate only: nothing was reranked.")
+    if estimate > eval_cfg.confirm_above_usd and not confirmed:
+        raise ConfirmationNeeded(
+            f"The estimate is above ${eval_cfg.confirm_above_usd:.2f}. "
+            "Run again with --yes to go ahead."
+        )
+
+
+def _confirm_transform(
+    transformer: Any,
+    questions: list[Question],
+    encoding: Any,
+    eval_cfg: EvalConfig,
+    confirmed: bool,
+    estimate_only: bool,
+    log: Callable[[str], None],
+) -> None:
+    """Print what an LLM query transformation will cost for these questions, and stop if
+    the caller asked only for the estimate or the cost is above the limit and
+    unconfirmed. One call per question; a question already in the cache is free."""
+
+    def tokens(text: str) -> int:
+        return len(encoding.encode(text, disallowed_special=()))
+
+    new = [q for q in questions if not transformer.is_cached(q.text)]
+    tokens_in = sum(tokens(transformer.system_prompt()) + tokens(transformer.prompt(q.text))
+                    for q in new)
+    tokens_out = len(new) * transformer.output_tokens
+    if transformer.model.startswith("claude"):
+        tokens_in = int(tokens_in * CLAUDE_TOKENS_PER_CL100K)
+    estimate = generation_cost(transformer.model, tokens_in, tokens_out)
+    log(
+        f"Estimated transformation cost: ${estimate:.2f}. {transformer.model}: {len(new)} new "
+        f"calls of {len(questions)}, about {tokens_in:,} tokens in and {tokens_out:,} out."
+    )
+    if not new:
+        return
+    if estimate_only:
+        raise EstimateOnly("Estimate only: no question was transformed.")
     if estimate > eval_cfg.confirm_above_usd and not confirmed:
         raise ConfirmationNeeded(
             f"The estimate is above ${eval_cfg.confirm_above_usd:.2f}. "

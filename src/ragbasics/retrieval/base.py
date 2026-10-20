@@ -1,15 +1,20 @@
 """What every retriever takes and returns.
 
-A retriever turns a question into a ranked list of chunks. It is given the pipeline's
-index at call time: the vector store, the embedder that built it, and the directory it
-is saved in. Retrievers add no chunks of their own, so dense, sparse and hybrid search
-all rank the same chunks and differ only in how.
+A retriever turns a query into a ranked list of chunks. The query is usually the
+question; with a query transformation (Stage 7) it can also be a made-up answer passage,
+and `kind` then says "document" so that an embedder which treats questions and passages
+differently embeds it as a passage.
+
+It is given the pipeline's index at call time: the vector store, the embedder that built
+it, and the directory it is saved in. Retrievers add no chunks of their own, so dense,
+sparse and hybrid search all rank the same chunks and differ only in how.
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from ragbasics.embedding.base import Kind
 from ragbasics.types import Candidate
 
 
@@ -32,4 +37,6 @@ class Retrieval:
 
 
 class Retriever(Protocol):
-    def retrieve(self, question: str, k: int, index: Index) -> Retrieval: ...
+    def retrieve(
+        self, question: str, k: int, index: Index, kind: Kind = "query"
+    ) -> Retrieval: ...

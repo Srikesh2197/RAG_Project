@@ -43,6 +43,8 @@ local = [
 frameworks = [
     # Library equivalent of the hand-written BM25 index (Stage 5).
     "bm25s>=0.3",
+    # Library equivalents of multi-query retrieval and HyDE (Stage 7).
+    "langchain-classic>=1.0",
     "langchain-text-splitters>=1.1",
 ]
 

@@ -2,8 +2,10 @@
 
     streamlit run app/streamlit_app.py -- --config configs/baseline.yaml
 
-Each question is answered on its own; the chat has no memory of earlier turns
-(follow-up questions arrive in Stage 7).
+With a config that names a `followup` rewriter (Stage 7), a message that leans on
+earlier turns ("and what about Google?") is first rewritten into a question that stands
+on its own, using the last few turns of the same collection. Without one, each question
+is answered on its own. Retrieval and the answer never see the earlier turns directly.
 """
 
 import argparse
@@ -13,7 +15,14 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from ragbasics.cli import DEFAULT_DOCUMENTS, LEDGER, found_by, moved_from, source_label
+from ragbasics.cli import (
+    DEFAULT_DOCUMENTS,
+    LEDGER,
+    format_queries,
+    found_by,
+    moved_from,
+    source_label,
+)
 from ragbasics.config import PipelineConfig, load_config
 from ragbasics.eval.dataset import read_documents
 from ragbasics.pipeline import Pipeline
@@ -57,6 +66,11 @@ def ingest_with_progress(pipeline: Pipeline, documents: list[Document]) -> None:
 
 
 def render_trace(trace: Trace) -> None:
+    if trace.asked:
+        st.caption(f"Follow-up rewritten before retrieval. Answered as: {trace.question}")
+    if trace.transform:
+        with st.expander(f"Queries ({len(trace.queries)} searched with)"):
+            st.text("\n".join(format_queries(trace)).strip())
     with st.expander(f"Retrieved chunks ({len(trace.candidates)})"):
         if trace.rerank:
             st.caption(
@@ -71,7 +85,7 @@ def render_trace(trace: Trace) -> None:
             st.caption(
                 f"{chunk.chunk_id} · characters {chunk.start_char} to {chunk.end_char}"
                 + (f" · {moved} before reranking" if moved else "")
-                + (f" · rank in each retriever: {ranks}" if ranks else "")
+                + (f" · rank in each list: {ranks}" if ranks else "")
             )
             st.text(chunk.text)
     with st.expander("Prompt sent to the generator"):
@@ -118,6 +132,9 @@ def sidebar(config_path: str) -> Pipeline:
             f"{pipeline.cfg.chunker.params}, {pipeline.embedder.model}, "
             f"{pipeline.cfg.retriever.name} retrieval, "
             f"top {pipeline.cfg.top_k}, {pipeline.generator.model}"
+            + (f", query transformation {pipeline.transformer.name}" if pipeline.transformer
+               else "")
+            + (", follow-ups rewritten" if pipeline.followup else "")
         )
     st.session_state.collection = collection
     return pipeline
@@ -133,13 +150,17 @@ def main() -> None:
     history: list[tuple[str, Trace]] = st.session_state.setdefault("history", [])
     for collection, trace in history:
         with st.chat_message("user"):
-            st.write(trace.question)
+            st.write(trace.asked or trace.question)
         with st.chat_message("assistant"):
             st.write(trace.answer)
             st.caption(f"Collection: {collection}")
             render_trace(trace)
 
-    question = st.chat_input("Ask a question. Each one is answered on its own.")
+    question = st.chat_input(
+        "Ask a question. Follow-ups are understood."
+        if pipeline.followup
+        else "Ask a question. Each one is answered on its own."
+    )
     if not question:
         return
     with st.chat_message("user"):
@@ -147,7 +168,14 @@ def main() -> None:
     with st.chat_message("assistant"):
         try:
             with st.spinner("Retrieving and answering"):
-                trace = pipeline.ask(question)
+                # Earlier turns of this collection only, as the question that was
+                # answered and its answer.
+                turns = [
+                    (t.question, t.answer)
+                    for collection, t in history
+                    if collection == st.session_state.collection
+                ]
+                trace = pipeline.ask(question, history=turns)
         except Exception as error:  # shown to the user: missing key, empty index, API error
             st.error(f"{type(error).__name__}: {error}")
             return

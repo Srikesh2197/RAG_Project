@@ -33,7 +33,6 @@ Stage 7 builds decomposition properly, with a model. Cost: $0.
 
 import argparse
 import csv
-import re
 import statistics
 from pathlib import Path
 
@@ -45,6 +44,7 @@ from ragbasics.eval.dataset import read_questions
 from ragbasics.eval.runner import count_relevant, score_retrieval
 from ragbasics.eval.stats import paired_bootstrap
 from ragbasics.pipeline import Pipeline
+from ragbasics.query.clauses import split_clauses
 from ragbasics.registry import build
 from ragbasics.rerank.base import passage_text
 from ragbasics.types import Candidate, Question
@@ -56,31 +56,6 @@ DEPTHS = [20, 50, 100]
 METRICS = ["recall@2000tok", "ndcg@10", "full_support@10", "mrr@10"]
 TYPES = {"comparison_query": "comparison", "inference_query": "inference",
          "temporal_query": "temporal"}
-MIN_WORDS = 5  # a piece shorter than this joins the piece before it
-BOUNDARY = re.compile(r",\s+|\s+(?:while|whereas|and|but|before|after)\s+")
-
-
-def split_clauses(question: str) -> list[str]:
-    """Cut a question at commas and at a few joining words.
-
-    A piece under five words (", 2023," or "and Fortune") is glued back onto the piece
-    before it, so dates and short lists stay whole. A question with no boundary is one
-    clause.
-    """
-    spans: list[list[int]] = []  # [start, end) of each clause in the question
-    start = 0
-    for match in [*BOUNDARY.finditer(question), None]:
-        end = match.start() if match else len(question)
-        if spans and len(question[start:end].split()) < MIN_WORDS:
-            spans[-1][1] = end
-        elif question[start:end].strip():
-            spans.append([start, end])
-        start = match.end() if match else end
-    # A short first piece joins the one after it.
-    if len(spans) > 1 and len(question[spans[0][0] : spans[0][1]].split()) < MIN_WORDS:
-        spans[1][0] = spans[0][0]
-        spans = spans[1:]
-    return [question[a:b].strip() for a, b in spans]
 
 
 def by_score(scores: list[float]) -> list[int]:

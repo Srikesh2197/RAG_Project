@@ -74,10 +74,23 @@ class Candidate:
     chunk: Chunk
     score: float
     rank: int
-    # Which step produced this rank and score: "dense", "sparse", "hybrid" or "rerank".
-    # The score's scale depends on it (a cosine, a BM25 score, a fused score, a
-    # reranker's score).
+    # Which step produced this rank and score: "dense", "sparse", "hybrid", "queries"
+    # (several queries' lists combined) or "rerank". The score's scale depends on it
+    # (a cosine, a BM25 score, a fused score, a reranker's score).
     retriever: str = "dense"
+
+
+@dataclass(frozen=True)
+class Query:
+    """One string that is searched with, or that a reranker scores chunks against.
+
+    `role` says where it came from: "original" (the question as asked), "rewrite",
+    "paraphrase", "hypothetical" (a made-up answer passage), "sub-question" (written by
+    a model) or "clause" (cut out of the question by a rule).
+    """
+
+    text: str
+    role: str = "original"
 
 
 @dataclass
@@ -89,6 +102,20 @@ class Trace:
     """
 
     question: str
+    # In a chat, what the user typed when that is not the question that was answered: a
+    # follow-up such as "and what about Google?" is first rewritten into a question that
+    # stands on its own (Stage 7), and `question` holds the rewritten one.
+    asked: str = ""
+    # With a query transformation (Stage 7): the queries the retriever searched with,
+    # each query's own ranked list in the same order, and the queries the reranker
+    # scored against. `candidates` is then the combined list. All three are empty
+    # without a transformation, when `question` is the only query there is.
+    queries: list[Query] = field(default_factory=list)
+    query_lists: list[list[Candidate]] = field(default_factory=list)
+    rerank_queries: list[Query] = field(default_factory=list)
+    # What the transformation reported: its name and model, whether the reply came
+    # from the cache, repairs to the reply, and whether it fell back to the question.
+    transform: dict[str, Any] = field(default_factory=dict)
     candidates: list[Candidate] = field(default_factory=list)
     # Each underlying retriever's own list, before fusion, with its own scores and
     # ranks. One entry for dense or sparse search; two for hybrid, where `candidates`

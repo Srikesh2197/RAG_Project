@@ -5,6 +5,7 @@ Models not listed (the offline ones) cost nothing.
 """
 
 import csv
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -49,3 +50,46 @@ def append_ledger(
             writer.writerow(LEDGER_FIELDS)
         time = datetime.now(UTC).isoformat(timespec="seconds")
         writer.writerow([time, step, model, input_tokens, output_tokens, f"{cost_usd:.6f}"])
+
+
+class Meter:
+    """Counts paid calls as they complete, from any thread.
+
+    A run that adds up its spend only at the end loses the count if it crashes after
+    paid calls. A meter is updated call by call, so whatever was spent can be written
+    to the ledger from a `finally`.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._totals: dict[str, list[int]] = {}  # model -> [calls, input, output tokens]
+
+    def add(self, model: str, input_tokens: int, output_tokens: int) -> None:
+        with self._lock:
+            totals = self._totals.setdefault(model, [0, 0, 0])
+            totals[0] += 1
+            totals[1] += input_tokens
+            totals[2] += output_tokens
+
+    def totals(self) -> dict[str, tuple[int, int, int]]:
+        with self._lock:
+            return {model: (t[0], t[1], t[2]) for model, t in self._totals.items()}
+
+    def reset(self) -> None:
+        with self._lock:
+            self._totals = {}
+
+    def cost(self) -> float:
+        return sum(generation_cost(m, t[1], t[2]) for m, t in self.totals().items())
+
+    def flush(self, path: Path, step: str) -> float:
+        """Write one ledger row per model for everything counted so far, and reset."""
+        with self._lock:
+            totals, self._totals = self._totals, {}
+        spent = 0.0
+        for model, (_, tokens_in, tokens_out) in totals.items():
+            dollars = generation_cost(model, tokens_in, tokens_out)
+            if dollars:
+                append_ledger(path, step, model, tokens_in, tokens_out, dollars)
+            spent += dollars
+        return spent

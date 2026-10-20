@@ -39,7 +39,14 @@ def source_label(metadata: dict) -> str:
 
 def found_by(trace: Trace, chunk_id: str) -> str:
     """'dense 3, sparse 41' for a fused chunk: its rank in each retriever's own list.
-    Empty unless the trace holds more than one list (hybrid retrieval)."""
+    With several queries (a query transformation), its rank in each query's list:
+    'query 1: 3, query 2: not found'. Empty when there was one list only."""
+    if len(trace.query_lists) > 1:
+        parts = []
+        for i, candidates in enumerate(trace.query_lists, start=1):
+            rank = next((c.rank for c in candidates if c.chunk.chunk_id == chunk_id), None)
+            parts.append(f"query {i}: {rank if rank else 'not found'}")
+        return ", ".join(parts)
     if len(trace.retrievers) < 2:
         return ""
     parts = []
@@ -56,6 +63,30 @@ def moved_from(trace: Trace, chunk_id: str) -> str:
     return f"was {rank}" if rank else ""
 
 
+def format_queries(trace: Trace) -> list[str]:
+    """What a query transformation did: the queries searched with, and the ones the
+    reranker scored against when those differ. Empty without a transformation."""
+    if not trace.transform:
+        return []
+    note = ", ".join(
+        f"{key} {value}" if not isinstance(value, bool) else key
+        for key, value in trace.transform.items()
+        if key in ("fallback", "refused", "empty", "repeated", "extra", "missing") and value
+    )
+    lines = [
+        f"Query transformation '{trace.transform['name']}' by "
+        f"{trace.models.get('transformer')}" + (f" ({note})" if note else "") + ":",
+        "  Searched with:",
+        *[f"    {i}. [{q.role}] {q.text}" for i, q in enumerate(trace.queries, start=1)],
+    ]
+    if trace.rerank and trace.rerank_queries != trace.queries:
+        lines += [
+            "  Reranked against:",
+            *[f"    {i}. [{q.role}] {q.text}" for i, q in enumerate(trace.rerank_queries, 1)],
+        ]
+    return [*lines, ""]
+
+
 def format_trace(trace: Trace) -> str:
     title = "Retrieved chunks:"
     if trace.rerank:
@@ -63,7 +94,10 @@ def format_trace(trace: Trace) -> str:
             f"Retrieved chunks, top {trace.rerank['depth']} reranked by "
             f"{trace.models.get('reranker')}:"
         )
-    lines = [f"Answer: {trace.answer}", "", title]
+    lines = [f"Answer: {trace.answer}", ""]
+    if trace.asked:
+        lines += [f"Asked: {trace.asked}", f"Answered as: {trace.question}", ""]
+    lines += [*format_queries(trace), title]
     for c in trace.candidates:
         chunk = c.chunk
         notes = ", ".join(

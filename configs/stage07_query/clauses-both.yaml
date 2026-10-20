@@ -1,0 +1,40 @@
+# Stage 7: the question is cut into clauses by a fixed rule, with no model.
+# Differs from configs/stage05_retrieval/hybrid-rrf.yaml in the query transformation only.
+# No reranker: the combined list is final.
+name: query-clauses-both
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+query_transform:
+  name: clauses
+  params:
+    # The retriever searches with the question and the transformed queries.
+    retrieve_with: both
+    rerank_with: original
+    combine: {method: round_robin}
+
+top_k: 5
+
+# Vectors of questions and queries already computed, so a repeat costs nothing.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

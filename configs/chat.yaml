@@ -1,0 +1,59 @@
+# The Streamlit app as a chat (Stage 7): the best retrieval so far at the depth chosen for
+# an interactive system, 25 chunks in the prompt, and follow-up questions rewritten.
+#     streamlit run app/streamlit_app.py -- --config configs/chat.yaml
+# Not an evaluation row: no run is made from this file.
+name: chat
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# Depth 50: about 6 seconds per question on this machine against 12 at depth 100, for
+# 2.6 points less recall in 2,000 tokens (Stage 6). Someone is waiting on this one.
+reranker:
+  name: cross_encoder
+  params:
+    model: Qwen/Qwen3-Reranker-0.6B
+    revision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+    scoring: yes_no
+    depth: 50
+    # A question is about 54 tokens and a chunk about 92, far under this limit.
+    max_length: 512
+    batch_size: 32
+    # Scores already computed. One pass at depth 100 also serves 20 and 50.
+    cache: data/cache/rerank.sqlite
+
+# 25 chunks of about 92 tokens. A placeholder: Stage 8 chooses the number of chunks.
+top_k: 25
+
+# A message that leans on earlier turns ("and what about Google?") is rewritten into a
+# question that stands on its own before retrieval. The first message of a chat is
+# never sent to this model.
+followup:
+  name: llm
+  params:
+    generator: {name: openai, params: {model: gpt-6-luna, max_tokens: 2000}}
+    turns: 3
+    cache: data/cache/llm.sqlite
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

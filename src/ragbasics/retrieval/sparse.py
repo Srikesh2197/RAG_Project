@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ragbasics.embedding.base import Kind
 from ragbasics.index.bm25 import BM25Index
 from ragbasics.registry import register
 from ragbasics.retrieval.base import Index, Retrieval
@@ -95,7 +96,8 @@ class SparseRetriever:
             self._built = (id(index.store), len(chunks), bm25)
             return bm25
 
-    def retrieve(self, question: str, k: int, index: Index) -> Retrieval:
+    def retrieve(self, question: str, k: int, index: Index, kind: Kind = "query") -> Retrieval:
+        # `kind` is for embedders. Terms are terms whichever side they come from.
         bm25 = self.index_for(index)
         t0 = time.perf_counter()
         hits = bm25.search(self.tokenizer(question), k, self.k1, self.b)

@@ -2,15 +2,16 @@
 
 import time
 
+from ragbasics.embedding.base import Kind
 from ragbasics.registry import register
 from ragbasics.retrieval.base import Index, Retrieval
 
 
 @register("retriever", "dense")
 class DenseRetriever:
-    def retrieve(self, question: str, k: int, index: Index) -> Retrieval:
+    def retrieve(self, question: str, k: int, index: Index, kind: Kind = "query") -> Retrieval:
         t0 = time.perf_counter()
-        embedded = index.embedder.embed([question], kind="query")
+        embedded = index.embedder.embed([question], kind=kind)
         t1 = time.perf_counter()
         found = index.store.search(embedded.vectors[0], k)
         t2 = time.perf_counter()

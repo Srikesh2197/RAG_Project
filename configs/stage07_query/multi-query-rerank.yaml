@@ -1,0 +1,56 @@
+# Stage 7: an LLM writes three other phrasings of the question, in front of the Stage 6 reranker.
+# Differs from configs/stage06_rerank/qwen3-100.yaml in the query transformation only: it changes which
+# candidates the reranker is given, and not what the reranker scores them against.
+name: query-multi-query-rerank
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+reranker:
+  name: cross_encoder
+  params:
+    model: Qwen/Qwen3-Reranker-0.6B
+    revision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+    scoring: yes_no
+    depth: 100
+    max_length: 512
+    batch_size: 32
+    cache: data/cache/rerank.sqlite
+
+query_transform:
+  name: multi_query
+  params:
+    # The retriever searches with the question and the transformed queries.
+    # The reranker still scores each candidate against the question as asked.
+    retrieve_with: both
+    rerank_with: original
+    combine: {method: rrf, k: 60}
+    n: 3
+    generator: {name: openai, params: {model: gpt-6-luna, max_tokens: 2000}}
+    # A repeated question is read from the LLM cache and not paid for again.
+    cache: data/cache/llm.sqlite
+
+top_k: 5
+
+# Vectors of questions and queries already computed, so a repeat costs nothing.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}
