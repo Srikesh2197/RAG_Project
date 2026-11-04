@@ -16,7 +16,8 @@ MultiQueryRetriever against `ragbasics.query.llm.MultiQuery`:
   once, in the order they were first seen: all of the first query's, then whatever the
   second adds, and so on. There is no ranking across queries, so the list has no
   meaningful order and grows with the number of queries. The hand-written pipeline
-  fuses the lists by reciprocal rank and returns a ranked list of the length asked for.
+  combines the lists by reciprocal rank or by round robin (each list's next best in
+  turn, the form Stage 7 chose) and returns a ranked list of the length asked for.
 - Failure. A provider's refusal or an empty reply is not handled; the hand-written
   version falls back to the question and records it.
 

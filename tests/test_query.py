@@ -610,6 +610,7 @@ def test_stage07_configs_change_only_the_query_transformation():
         if split:
             assert transformer.retrieve_with == "original"
             assert path.stem.endswith(f"-{cfg.reranker.params['depth']}")
-        assert ("-both" in path.stem or cfg.query_transform.name == "multi_query") == (
-            transformer.retrieve_with == "both"
-        )
+        else:
+            # The form chosen on the pool questions by scripts/stage07_tune.py.
+            assert transformer.retrieve_with == "both"
+            assert transformer.combine_method == "round_robin"

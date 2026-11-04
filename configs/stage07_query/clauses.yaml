@@ -25,8 +25,10 @@ retriever:
 query_transform:
   name: clauses
   params:
-    # The retriever searches with the transformed queries in place of the question.
-    retrieve_with: queries
+    # Chosen on the pool questions (scripts/stage07_tune.py): search with both, combine by
+    # taking each list's next best chunk in turn.
+    # The retriever searches with the question and the transformed queries.
+    retrieve_with: both
     rerank_with: original
     combine: {method: round_robin}
 

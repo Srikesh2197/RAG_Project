@@ -385,10 +385,11 @@ def test_an_llm_reranker_is_estimated_before_any_call_and_free_when_cached(evalu
 
     run(reranked)
     assert ReverseRanker.calls == len(QUESTIONS)
-    # Every ordering is now cached: a repeat calls nothing, bills nothing, and an
-    # estimate-only run has nothing to stop for.
+    # Every ordering is now cached: an estimate-only run still stops, calls nothing and
+    # bills nothing.
     lines = len((tmp_path / "ledger.csv").read_text().splitlines())
-    run(reranked, estimate_only=True)
+    with pytest.raises(EstimateOnly, match="nothing was reranked"):
+        run(reranked, estimate_only=True)
     assert ReverseRanker.calls == len(QUESTIONS)
     assert len((tmp_path / "ledger.csv").read_text().splitlines()) == lines
 

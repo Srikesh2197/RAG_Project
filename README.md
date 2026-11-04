@@ -17,8 +17,8 @@ Core mechanics are written from scratch first. Library equivalents are shown nex
 | 4 | Embedding models | done | [04-embedding-models.md](docs/stages/04-embedding-models.md) |
 | 5 | Sparse and hybrid retrieval | done | [05-sparse-hybrid-retrieval.md](docs/stages/05-sparse-hybrid-retrieval.md) |
 | 6 | Reranking | done | [06-reranking.md](docs/stages/06-reranking.md) |
-| 7 | Query transformation | next | |
-| 8 | Context assembly and prompt construction | | |
+| 7 | Query transformation | done | [07-query-transformation.md](docs/stages/07-query-transformation.md) |
+| 8 | Context assembly and prompt construction | next | |
 | 9 | Citations and abstention | | |
 | 10 | PDF parsing and ingestion | | |
 | 11 | Indexing, vector stores and metadata filtering | | |
@@ -95,6 +95,19 @@ To add a reranker behind hybrid retrieval (Stage 6). The local rerankers need `m
 .venv/bin/python scripts/stage06_clauses.py                           # why a small cross-encoder fails on multi-part questions
 ```
 
+To transform the question before retrieval (Stage 7). The LLM transformations call `gpt-6-luna` once per question and are cached, so a repeat is free:
+
+```bash
+.venv/bin/python scripts/stage07_transform.py --estimate              # cost of transforming the pool and development questions
+.venv/bin/python scripts/stage07_transform.py --examples 5            # five example outputs per transformation
+.venv/bin/python scripts/stage07_tune.py --estimate                   # choose each form on the pool questions (no LLM calls)
+.venv/bin/rag eval --config configs/stage07_query/decompose.yaml --retrieval-only
+.venv/bin/python scripts/stage07_sweep.py                             # the transformation tables, with and without the reranker
+.venv/bin/python scripts/stage07_followups.py --estimate              # spot check of the chat's follow-up rewriting
+```
+
+`configs/chat.yaml` is a chat config with follow-up rewriting on, behind hybrid retrieval and Qwen3-Reranker at depth 50 (needs `make setup-local`). `make app` uses the baseline config; run the chat one with `.venv/bin/streamlit run app/streamlit_app.py -- --config configs/chat.yaml`.
+
 `make app-offline` runs the same app with no keys, using a word-hashing embedder and no LLM. It shows the mechanics, not useful answers.
 
 ## Results
@@ -150,6 +163,18 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 | rerank-llm-luna-50 | 70.4 (65–78) | 49.4 (41–62) | 81.1 (77–86) | 71.5 (67–78) | 80.4 (76–87) | 3.3 (2.9–3.7) | +35.6 (+30.4 to +39.8) | +1.58 (+1.15 to +2.07) | -1.9 (-3.8 to -0.1) |
 | rerank-qwen3-100-header | 57.7 (50–67) | 32.2 (24–43) | 65.4 (59–73) | 58.1 (51–66) | 83.3 (78–90) | 3.3 (2.9–3.7) | +38.5 (+33.7 to +42.9) | +1.65 (+1.24 to +2.12) | +1.0 (-0.9 to +2.8) |
 | rerank-qwen3-100-qwen3-embed | 59.8 (51–70) | 38.1 (28–52) | 67.9 (62–76) | 61.1 (54–70) | 82.0 (77–88) | 3.3 (3.0–3.7) | +37.2 (+32.3 to +41.4) | +1.62 (+1.23 to +2.05) | -0.3 (-1.4 to +1.0) |
+| query-clauses-rerank | 60.4 (52–71) | 38.5 (29–51) | 68.1 (62–76) | 61.7 (55–70) | 82.9 (79–89) | 3.3 (3.0–3.7) | +38.1 (+32.8 to +42.5) | +1.66 (+1.25 to +2.12) | +0.6 (-0.9 to +2.0) |
+| query-rewrite | 48.9 (42–58) | 23.6 (17–34) | 57.4 (51–66) | 49.1 (44–57) | 73.1 (68–81) | 2.9 (2.6–3.3) | +28.3 (+23.9 to +32.6) | +1.26 (+0.88 to +1.71) | -9.2 (-11.3 to -6.5) |
+| query-multi-query | 49.2 (43–59) | 24.7 (18–35) | 57.1 (51–65) | 49.5 (44–57) | 73.3 (68–81) | 2.9 (2.6–3.3) | +28.5 (+24.0 to +32.8) | +1.25 (+0.88 to +1.70) | -9.0 (-11.2 to -6.5) |
+| query-hyde | 49.1 (42–59) | 23.6 (17–33) | 57.7 (51–66) | 49.8 (44–58) | 74.5 (70–82) | 3.0 (2.7–3.3) | +29.7 (+25.5 to +33.8) | +1.29 (+0.95 to +1.68) | -7.8 (-9.9 to -5.2) |
+| query-decompose | 57.5 (52–66) | 33.1 (26–44) | 59.0 (53–67) | 54.5 (49–62) | 78.1 (73–85) | 3.1 (2.8–3.5) | +33.3 (+28.9 to +37.2) | +1.47 (+1.09 to +1.91) | -4.2 (-6.2 to -1.9) |
+| query-clauses | 51.7 (46–59) | 28.1 (21–37) | 56.2 (50–64) | 50.8 (45–59) | 74.5 (69–82) | 3.0 (2.6–3.3) | +29.7 (+25.1 to +34.2) | +1.29 (+0.94 to +1.67) | -7.8 (-10.7 to -4.7) |
+| query-rewrite-rerank | 59.7 (51–70) | 38.1 (28–51) | 67.4 (61–75) | 60.9 (54–70) | 82.7 (78–89) | 3.3 (3.0–3.7) | +37.9 (+33.0 to +41.8) | +1.64 (+1.25 to +2.08) | +0.4 (-0.2 to +0.9) |
+| query-multi-query-rerank | 60.0 (52–70) | 38.3 (28–51) | 67.6 (61–75) | 61.1 (55–70) | 82.9 (78–89) | 3.3 (3.0–3.7) | +38.1 (+32.9 to +42.1) | +1.65 (+1.25 to +2.12) | +0.5 (-0.4 to +1.4) |
+| query-hyde-rerank | 60.1 (52–71) | 38.3 (29–51) | 67.7 (62–76) | 61.2 (55–70) | 82.9 (78–89) | 3.3 (3.0–3.7) | +38.1 (+33.1 to +41.9) | +1.66 (+1.27 to +2.11) | +0.6 (-0.4 to +1.4) |
+| query-decompose-rerank | 60.2 (51–71) | 38.8 (28–52) | 67.5 (61–75) | 61.2 (54–70) | 82.6 (78–88) | 3.3 (3.0–3.7) | +37.8 (+32.6 to +41.9) | +1.65 (+1.25 to +2.10) | +0.2 (-1.5 to +1.9) |
+| query-decompose-rerank-split-50 | 65.7 (59–75) | 43.5 (32–58) | 69.1 (64–76) | 63.8 (58–72) | 80.4 (76–87) | 3.3 (2.9–3.7) | +35.6 (+30.6 to +39.8) | +1.58 (+1.18 to +2.05) | -1.9 (-3.4 to -0.5) |
+| query-clauses-rerank-split-50 | 59.8 (52–69) | 36.7 (27–49) | 69.8 (65–76) | 61.4 (55–69) | 79.8 (75–87) | 3.2 (2.9–3.6) | +35.0 (+30.3 to +39.2) | +1.55 (+1.17 to +1.99) | -2.5 (-4.1 to -0.8) |
 
 **Answers**
 

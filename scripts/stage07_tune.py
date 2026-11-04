@@ -177,6 +177,9 @@ class Sweep:
             d = versus()
             row |= {"vs_reference": d.mean, "vs_reference_low": d.low, "vs_reference_high": d.high}
         for kind, label in TYPES.items():
+            if not any(q.question_type == kind for q in questions):
+                row[f"{label}_recall"] = float("nan")  # only with --limit
+                continue
             row[f"{label}_recall"] = mean(DECIDES, kind)
             if reference:
                 row[f"{label}_vs"] = versus(kind).mean
@@ -286,6 +289,10 @@ def main() -> None:
                              "chosen on the pool, with no reranker")
     parser.add_argument("--only", nargs="+", choices=TRANSFORMS, default=TRANSFORMS)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--csv", type=Path, default=CSV, help="where --write puts the rows")
+    parser.add_argument("--limit", type=int, default=0,
+                        help="only the first N questions of each split: a quick check of the "
+                             "script, not a result")
     args = parser.parse_args()
     load_dotenv()
 
@@ -296,6 +303,8 @@ def main() -> None:
     with_evidence = {s: [q for q in read_questions(SPLITS[s]) if q.evidence] for s in args.splits}
     questions = {s: capped(qs, CLUSTER_CAP, SEED) if s == "pool" else qs
                  for s, qs in with_evidence.items()}
+    if args.limit:
+        questions = {s: qs[: args.limit] for s, qs in questions.items()}
     sweep = Sweep(base, eval_cfg, questions)
     print(", ".join(f"{len(qs)} {split} questions" for split, qs in questions.items())
           + ". Settings are chosen on the pool.")
@@ -345,8 +354,12 @@ def main() -> None:
 
         if not args.rerank or split not in args.rerank_splits:
             continue
-        reference = (split, "rerank", "none")
-        reranked = sweep.rerank(sweep.pipeline(reranker=reranker), first, f"{split} reference")
+        reference = (split, "rerank", "none", args.depth)
+        # The reference reads as deep as the reranker does, like every row it is compared
+        # with. Reranking `first` would hand it only the plain list's top k.
+        with_reranker = sweep.pipeline(reranker=reranker)
+        reranked = sweep.rerank(with_reranker, sweep.first_stage(with_reranker, split),
+                                f"{split} reference")
         sweep.record(split, reranked, None, family="rerank", transform="none", depth=args.depth)
         # --- candidates: the transformation changes what the reranker is given ------------
         if "candidates" in args.rerank:
@@ -390,13 +403,13 @@ def main() -> None:
             print(f"  {key}: searched with {retrieve_with}"
                   + (f", combined by {combine['method']}" if combine else ""))
     if args.write:
-        with open(CSV, "w", newline="") as f:
+        with open(args.csv, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=FIELDS, restval="")
             writer.writeheader()
             for row in sweep.rows:
                 writer.writerow({k: round(v, 4) if isinstance(v, float) else v
                                  for k, v in row.items()})
-        print(f"\nWrote {CSV} ({len(sweep.rows)} rows)")
+        print(f"\nWrote {args.csv} ({len(sweep.rows)} rows)")
 
 
 def estimate(sweep: Sweep, reranker, ready: list[str], splitters: list[str], depth: int) -> None:

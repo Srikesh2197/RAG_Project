@@ -298,6 +298,10 @@ def _run_eval(
                     transformer, questions, encoding, eval_cfg, confirmed, estimate_only, log
                 )
                 meters.append(transformer.meter)
+            # A retrieval-only estimate stops once every paid step is estimated. An LLM
+            # reranker is estimated from the candidates, so that one retrieves first.
+            if estimate_only and not answers and not hasattr(pipeline.reranker, "prompt"):
+                raise EstimateOnly("Estimate only: nothing was retrieved.")
             log(f"Retrieving {eval_cfg.depth} chunks for {len(questions)} questions…")
             first_stage = _parallel(
                 lambda q: pipeline.first_stage(q.text, eval_cfg.depth),
@@ -313,6 +317,8 @@ def _run_eval(
                 _confirm_rerank(
                     reranker, first_stage, encoding, eval_cfg, confirmed, estimate_only, log
                 )
+                if estimate_only and not answers:
+                    raise EstimateOnly("Estimate only: nothing was reranked.")
             retrieved = _parallel(
                 lambda trace: pipeline.rerank(trace, eval_cfg.depth), first_stage, eval_cfg.workers
             )

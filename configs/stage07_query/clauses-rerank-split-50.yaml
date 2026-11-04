@@ -38,10 +38,12 @@ query_transform:
   params:
     # The retriever searches with the question as asked, so the candidates are
     # exactly those of the row this is compared with.
-    # The reranker scores each candidate against every part of the question in turn.
+    # The reranker scores each candidate against the question and against every part
+    # in turn; the orderings are merged by best score.
+    # Chosen on the pool questions (scripts/stage07_tune.py).
     retrieve_with: original
-    rerank_with: queries
-    rerank_combine: round_robin
+    rerank_with: both
+    rerank_combine: max
 
 top_k: 5
 
