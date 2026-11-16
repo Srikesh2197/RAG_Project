@@ -1,0 +1,51 @@
+# Stage 8: k20-header.yaml with the passages in "lost in the middle" order: the two best
+# at the ends, the weakest in the middle (LangChain's LongContextReorder).
+name: ctx-k20-header-edges
+index_dir: data/index/chunk-recursive-128
+
+chunker:
+  name: recursive
+  params: {size: 128}
+
+embedder:
+  name: openai
+  params: {model: text-embedding-3-small}
+
+store:
+  name: numpy
+
+retriever:
+  name: hybrid
+  params:
+    depth: 200
+    sparse: {stopwords: true, stemmer: porter, k1: 0.8, b: 1.0}
+    fusion: {method: rrf, k: 60}
+
+# The evaluator scores 50 chunks. A depth of 100 can bring chunks the retriever ranked
+# 51 to 100 into them, so recall@50 can change.
+reranker:
+  name: cross_encoder
+  params:
+    model: Qwen/Qwen3-Reranker-0.6B
+    revision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+    scoring: yes_no
+    depth: 100
+    # A question is about 54 tokens and a chunk about 92, far under this limit.
+    max_length: 512
+    batch_size: 32
+    # Scores already computed. One pass at depth 100 also serves 20 and 50.
+    cache: data/cache/rerank.sqlite
+
+top_k: 20
+
+# Context assembly.
+context:
+  name: assembler
+  params: {header: true, order: edges}
+
+# Question vectors already computed, so a repeat costs nothing and gives the same list.
+embedding_cache: data/cache/embeddings.sqlite
+
+generator:
+  name: anthropic
+  params: {model: claude-sonnet-5-5, max_tokens: 4096, effort: low}

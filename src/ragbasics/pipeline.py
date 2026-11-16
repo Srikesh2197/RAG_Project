@@ -2,14 +2,15 @@
 
     Index time:  documents -> chunker -> embedder -> store (saved to disk)
     Query time:  question -> (query transformation) -> retriever -> (reranker)
-                 -> prompt -> generator -> Trace
+                 -> context assembly -> prompt -> generator -> Trace
 
 The retriever is dense (embed the question, search the vectors), sparse (BM25 over the
 same chunks) or hybrid (both, fused). The optional reranker reads the question together
 with each of the retriever's top candidates and reorders them. The optional query
 transformation turns the question into one or more queries first; the retriever then
 runs once per query and the lists are combined. The generator always answers the
-question as asked.
+question as asked. Context assembly (Stage 8) turns the ranked chunks into the prompt's
+passages: which ones, merged how, labelled how, in what order.
 """
 
 import time
@@ -23,6 +24,7 @@ import ragbasics.chunking.fixed
 import ragbasics.chunking.parent_child
 import ragbasics.chunking.recursive
 import ragbasics.chunking.semantic
+import ragbasics.context.assemble
 import ragbasics.embedding.hashing
 import ragbasics.embedding.local
 import ragbasics.embedding.openai_embedder
@@ -37,12 +39,8 @@ import ragbasics.retrieval.dense
 import ragbasics.retrieval.hybrid
 import ragbasics.retrieval.sparse  # noqa: F401
 from ragbasics.config import ComponentSpec, PipelineConfig
-from ragbasics.context.prompts import (
-    CLOSED_BOOK_SYSTEM_PROMPT,
-    SYSTEM_PROMPT,
-    build_closed_book_prompt,
-    build_user_prompt,
-)
+from ragbasics.context.assemble import Assembler, Assembly
+from ragbasics.context.prompts import as_passages, build_prompt
 from ragbasics.costs import append_ledger, embedding_cost, generation_cost
 from ragbasics.embedding.cache import EmbeddingCache
 from ragbasics.query.base import route
@@ -50,7 +48,7 @@ from ragbasics.query.followup import Turn
 from ragbasics.registry import build
 from ragbasics.rerank.base import merge
 from ragbasics.retrieval.fusion import reciprocal_rank_fusion, round_robin
-from ragbasics.types import Candidate, Chunk, Document, Query, Trace
+from ragbasics.types import Candidate, Chunk, Document, Passage, Query, Trace
 
 EMBED_BATCH = 100  # chunks per embedding request
 
@@ -111,6 +109,12 @@ class Pipeline:
         )
         self.followup = _build("followup", cfg.followup) if cfg.followup else None
         self.generator = _build("generator", cfg.generator)
+        # With no `context` in the config: the top `top_k` chunks, rank order, no header.
+        self.assembler: Assembler = (
+            build("context", cfg.context.name, top_k=cfg.top_k, **cfg.context.params)
+            if cfg.context
+            else Assembler(top_k=cfg.top_k)
+        )
 
     # --- Index time ------------------------------------------------------------------
 
@@ -194,9 +198,14 @@ class Pipeline:
 
     def retrieve(self, question: str, k: int | None = None) -> Trace:
         """Rank chunks for the question: the configured retriever, then the reranker if
-        there is one. `k` defaults to the config's `top_k`; the evaluator asks for more,
-        to score ranks below the ones that reach the prompt."""
+        there is one. `k` defaults to what context assembly may choose from (the
+        config's `top_k`, or its larger pool); the evaluator asks for more, to score
+        ranks below the ones that reach the prompt."""
         return self.rerank(self.first_stage(question, k), k)
+
+    @property
+    def default_k(self) -> int:
+        return max(self.cfg.top_k, self.assembler.pool)
 
     def first_stage(self, question: str, k: int | None = None) -> Trace:
         """The retriever's list, before any reranking. With a reranker it is as deep as
@@ -207,7 +216,7 @@ class Pipeline:
             question=question,
             models={"embedder": self.embedder.model, "generator": self.generator.model},
         )
-        k = k or self.cfg.top_k
+        k = k or self.default_k
         fetch = max(k, self.reranker.depth) if self.reranker else k
         searches = self.transform(trace) if self.transformer else [Query(question)]
         # Several lists are fetched deeper than one would be, before they are combined.
@@ -283,7 +292,7 @@ class Pipeline:
         the reranked ones. So a depth at or below `k` only reorders the top of the list,
         and a depth above `k` can also bring in chunks the first stage ranked below `k`.
         """
-        k = k or self.cfg.top_k
+        k = k or self.default_k
         if self.reranker is None:
             trace.candidates = trace.candidates[:k]
             return trace
@@ -316,19 +325,24 @@ class Pipeline:
             )
         return trace
 
-    def generate(self, trace: Trace, context: list[Chunk] | None) -> Trace:
+    def assemble(self, trace: Trace) -> Assembly:
+        """The prompt's passages from the trace's ranked candidates (Stage 8), recorded
+        in the trace. Diversity selection reads the chunks' vectors from the store."""
+        vectors = getattr(self.store, "vectors_for", None)
+        assembly = self.assembler.assemble(trace.candidates, vectors)
+        trace.assembly = assembly.notes
+        return assembly
+
+    def generate(self, trace: Trace, context: list[Passage] | list[Chunk] | None) -> Trace:
         """Build the prompt from `context` and generate the answer, filling in `trace`.
 
-        `context=None` asks the question closed-book, with no passages at all.
+        `context` is a list of passages (from `assemble`) or plain chunks (one passage
+        each, no header). `None` asks the question closed-book, with no passages at all.
         """
-        if context is None:
-            trace.context = []
-            trace.system_prompt = CLOSED_BOOK_SYSTEM_PROMPT
-            trace.user_prompt = build_closed_book_prompt(trace.question)
-        else:
-            trace.context = context
-            trace.system_prompt = SYSTEM_PROMPT
-            trace.user_prompt = build_user_prompt(trace.question, context)
+        passages = None if context is None else as_passages(context)
+        trace.passages = passages or []
+        trace.context = [chunk for p in trace.passages for chunk in p.chunks]
+        trace.system_prompt, trace.user_prompt = build_prompt(trace.question, passages)
 
         t0 = time.perf_counter()
         generation = self.generator.generate(trace.system_prompt, trace.user_prompt)
@@ -365,7 +379,7 @@ class Pipeline:
             trace.cost_usd += generation_cost(
                 self.followup.model, standalone.input_tokens, standalone.output_tokens
             )
-        trace = self.generate(trace, [c.chunk for c in trace.candidates])
+        trace = self.generate(trace, self.assemble(trace).passages)
         if self.ledger and trace.cost_usd:
             append_ledger(
                 self.ledger,

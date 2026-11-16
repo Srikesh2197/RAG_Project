@@ -81,6 +81,40 @@ class Candidate:
 
 
 @dataclass(frozen=True)
+class Passage:
+    """One numbered passage in the prompt (Stage 8): a chunk, or several neighbouring
+    chunks of one article merged back together, with an optional header line naming
+    the article's title, source and date.
+
+    `rank` is the best rank among its chunks in the list it was assembled from (1 is
+    best). Ordering options read it; the prompt numbers passages by position instead.
+    """
+
+    chunks: tuple[Chunk, ...]
+    rank: int = 1
+    header: str = ""
+
+    @property
+    def text(self) -> str:
+        # Chunks are merged only when their offsets touch or overlap, so joining them
+        # gives back the article's own text with nothing added.
+        text = self.chunks[0].text
+        end = self.chunks[0].end_char
+        for chunk in self.chunks[1:]:
+            text += chunk.text[max(0, end - chunk.start_char) :]
+            end = max(end, chunk.end_char)
+        return text
+
+    @property
+    def doc_id(self) -> str:
+        return self.chunks[0].doc_id
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.chunks[0].metadata
+
+
+@dataclass(frozen=True)
 class Query:
     """One string that is searched with, or that a reranker scores chunks against.
 
@@ -131,6 +165,11 @@ class Trace:
     # The chunks pasted into the prompt. Usually the top of `candidates`; the evaluator
     # retrieves deeper than it prompts, and can also supply gold evidence or nothing.
     context: list[Chunk] = field(default_factory=list)
+    # The same chunks as numbered passages (Stage 8): merged neighbours, headers and the
+    # order they were pasted in. `context` lists their chunks in that order.
+    passages: list[Passage] = field(default_factory=list)
+    # What context assembly did: duplicates dropped, pairs merged, tokens, the order.
+    assembly: dict[str, Any] = field(default_factory=dict)
     system_prompt: str = ""
     user_prompt: str = ""
     answer: str = ""

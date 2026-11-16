@@ -46,6 +46,8 @@ frameworks = [
     # Library equivalents of multi-query retrieval and HyDE (Stage 7).
     "langchain-classic>=1.0",
     "langchain-text-splitters>=1.1",
+    # Library equivalents of MMR (langchain-core) and LongContextReorder (Stage 8).
+    "langchain-community>=0.4",
 ]
 
 [tool.setuptools.packages.find]

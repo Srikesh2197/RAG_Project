@@ -88,6 +88,25 @@ def render_trace(trace: Trace) -> None:
                 + (f" · rank in each list: {ranks}" if ranks else "")
             )
             st.text(chunk.text)
+    if trace.passages and (
+        any(len(p.chunks) > 1 or p.header for p in trace.passages)
+        or trace.assembly.get("order", "rank") != "rank"
+    ):
+        notes = trace.assembly
+        with st.expander(f"Passages in the prompt ({len(trace.passages)})"):
+            st.caption(
+                f"{notes.get('chunks')} chunks, {notes.get('order')} order, "
+                f"{notes.get('tokens')} tokens"
+                + (f", {notes['merged']} merged into a neighbour" if notes.get("merged") else "")
+                + (f", {notes['duplicates']} duplicates dropped"
+                   if notes.get("duplicates") else "")
+            )
+            for i, passage in enumerate(trace.passages, start=1):
+                ids = " + ".join(c.chunk_id for c in passage.chunks)
+                st.markdown(f"**[{i}] rank {passage.rank}** · {ids}")
+                if passage.header:
+                    st.caption(passage.header)
+                st.text(passage.text.strip())
     with st.expander("Prompt sent to the generator"):
         st.caption("System")
         st.text(trace.system_prompt)

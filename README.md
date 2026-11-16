@@ -18,8 +18,8 @@ Core mechanics are written from scratch first. Library equivalents are shown nex
 | 5 | Sparse and hybrid retrieval | done | [05-sparse-hybrid-retrieval.md](docs/stages/05-sparse-hybrid-retrieval.md) |
 | 6 | Reranking | done | [06-reranking.md](docs/stages/06-reranking.md) |
 | 7 | Query transformation | done | [07-query-transformation.md](docs/stages/07-query-transformation.md) |
-| 8 | Context assembly and prompt construction | next | |
-| 9 | Citations and abstention | | |
+| 8 | Context assembly and prompt construction | done | [08-context-assembly.md](docs/stages/08-context-assembly.md) |
+| 9 | Citations and abstention | next | |
 | 10 | PDF parsing and ingestion | | |
 | 11 | Indexing, vector stores and metadata filtering | | |
 | 12 | Capstone: ablation, held-out test | | |
@@ -106,6 +106,18 @@ To transform the question before retrieval (Stage 7). The LLM transformations ca
 .venv/bin/python scripts/stage07_followups.py --estimate              # spot check of the chat's follow-up rewriting
 ```
 
+To assemble the prompt from the ranked chunks (Stage 8): how many, which, with a title, source and date line, merged and ordered. The tuning sweep needs no model call; answer runs are paid per run (`--estimate` first):
+
+```bash
+.venv/bin/python scripts/stage08_tune.py --estimate                   # reranker pairs not cached yet
+.venv/bin/python scripts/stage08_tune.py                              # dedupe and MMR settings on the pool, free
+.venv/bin/rag eval --config configs/stage08_context/k20-header-merge.yaml --estimate
+.venv/bin/rag eval --config configs/stage08_context/k20-header-merge.yaml --yes   # the chosen settings
+.venv/bin/rag eval --config configs/stage08_context/k5-header.yaml --mode gold --yes   # gold evidence with headers
+.venv/bin/python scripts/stage08_sweep.py --size 20 --write           # the answer tables and the size plot
+.venv/bin/rag ask "Which company removed AI-created songs and added an AI DJ?" --config configs/stage08_context/k20-header-merge.yaml --show-prompt
+```
+
 `configs/chat.yaml` is a chat config with follow-up rewriting on, behind hybrid retrieval and Qwen3-Reranker at depth 50 (needs `make setup-local`). `make app` uses the baseline config; run the chat one with `.venv/bin/streamlit run app/streamlit_app.py -- --config configs/chat.yaml`.
 
 `make app-offline` runs the same app with no keys, using a word-hashing embedder and no LLM. It shows the mechanics, not useful answers.
@@ -113,7 +125,7 @@ To transform the question before retrieval (Stage 7). The LLM transformations ca
 ## Results
 
 <!-- results:start -->
-Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" is the paired difference on the same questions; an interval that excludes 0 is a difference the question sample does not explain. "vs best so far" is the same difference against `rerank-qwen3-100`, the configuration the current stage changes one variable in.
+Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" is the paired difference on the same questions; an interval that excludes 0 is a difference the question sample does not explain. "vs best so far" is the same difference against `rerank-qwen3-100`, the configuration the current stage changes one variable in. For answers it is against `ctx-k20-header-merge`. "prompt tokens" is the generator's mean input per question, as billed. Runs named `ctx-` change only how the retrieved chunks are assembled into the prompt, so they appear in the answer tables only.
 
 **Retrieval** (441 development questions with gold evidence)
 
@@ -178,15 +190,24 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 
 **Answers**
 
-| run | n | correct | correct, answerable | abstains on null | false abstentions | faithful | correct vs baseline | cost |
-|---|---|---|---|---|---|---|---|---|
-| baseline | 150 | 51.3 (42–60) | 44.7 (33–54) | 100.0 (100–100) | 52.3 (43–63) | 81.0 (68–90) |  | $1.31 |
-| baseline-r1 | 150 | 50.0 (41–58) | 43.2 (32–52) | 100.0 (100–100) | 53.0 (44–64) | 82.3 (73–90) | -1.3 (-4 to +2) | $1.31 |
-| baseline-gold | 150 | 46.0 (36–55) | 38.6 (25–49) | 100.0 (100–100) | 61.4 (51–75) | 58.8 (41–75) | -5.3 (-14 to +2) | $0.17 |
-| baseline-closed_book | 150 | 47.3 (36–56) | 41.7 (28–52) | 88.9 (72–100) | 56.1 (46–69) |  | -4.0 (-14 to +4) | $0.14 |
-| guesser | 150 | 52.7 (40–67) | 46.2 (32–63) | 100.0 (100–100) | 0.0 (0.0–0.0) |  | +1.3 (-13 to +17) |  |
-| chunk-recursive-128-k25 | 150 | 56.0 (47–64) | 50.0 (39–59) | 100.0 (100–100) | 47.0 (39–58) | 68.6 (57–78) | +4.7 (-2 to +11) | $1.43 |
-| retr-hybrid-rrf-top25 | 150 | 65.3 (58–73) | 60.6 (52–69) | 100.0 (100–100) | 38.6 (30–47) | 74.1 (63–82) | +14.0 (+7 to +23) | $1.43 |
+| run | n | correct | correct, answerable | abstains on null | false abstentions | faithful | correct vs baseline | correct vs best so far | prompt tokens | cost |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | 150 | 51.3 (42–60) | 44.7 (33–54) | 100.0 (100–100) | 52.3 (43–63) | 81.0 (68–90) |  | -36.0 (-45 to -27) | 4,124 | $1.31 |
+| baseline-r1 | 150 | 50.0 (41–58) | 43.2 (32–52) | 100.0 (100–100) | 53.0 (44–64) | 82.3 (73–90) | -1.3 (-4 to +2) | -37.3 (-46 to -29) | 4,124 | $1.31 |
+| baseline-gold | 150 | 46.0 (36–55) | 38.6 (25–49) | 100.0 (100–100) | 61.4 (51–75) | 58.8 (41–75) | -5.3 (-14 to +2) | -41.3 (-51 to -32) | 394 | $0.17 |
+| baseline-closed_book | 150 | 47.3 (36–56) | 41.7 (28–52) | 88.9 (72–100) | 56.1 (46–69) |  | -4.0 (-14 to +4) | -40.0 (-51 to -31) | 199 | $0.14 |
+| guesser | 150 | 52.7 (40–67) | 46.2 (32–63) | 100.0 (100–100) | 0.0 (0.0–0.0) |  | +1.3 (-13 to +17) | -34.7 (-49 to -19) |  |  |
+| chunk-recursive-128-k25 | 150 | 56.0 (47–64) | 50.0 (39–59) | 100.0 (100–100) | 47.0 (39–58) | 68.6 (57–78) | +4.7 (-2 to +11) | -31.3 (-40 to -24) | 4,503 | $1.43 |
+| retr-hybrid-rrf-top25 | 150 | 65.3 (58–73) | 60.6 (52–69) | 100.0 (100–100) | 38.6 (30–47) | 74.1 (63–82) | +14.0 (+7 to +23) | -22.0 (-29 to -15) | 4,491 | $1.43 |
+| ctx-k5 | 150 | 54.0 (45–62) | 47.7 (37–56) | 100.0 (100–100) | 50.8 (42–61) | 72.3 (60–82) | +2.7 (-5 to +10) | -33.3 (-42 to -25) | 1,053 | $0.37 |
+| ctx-k5-header | 150 | 72.0 (66–79) | 68.2 (61–75) | 100.0 (100–100) | 25.0 (18–32) | 84.8 (78–92) | +20.7 (+11 to +31) | -15.3 (-22 to -9) | 1,316 | $0.47 |
+| ctx-k5-header-gold | 150 | 80.7 (74–87) | 78.0 (70–85) | 100.0 (100–100) | 17.4 (11–24) | 70.6 (60–81) | +29.3 (+22 to +39) | -6.7 (-13 to +0) | 526 | $0.24 |
+| ctx-k3-header | 150 | 66.0 (59–72) | 61.4 (53–68) | 100.0 (100–100) | 33.3 (26–41) | 71.6 (62–83) | +14.7 (+6 to +24) | -21.3 (-29 to -14) | 894 | $0.33 |
+| ctx-k10-header | 150 | 79.3 (73–85) | 76.5 (70–83) | 100.0 (100–100) | 13.6 (9–19) | 84.2 (76–92) | +28.0 (+19 to +38) | -8.0 (-13 to -3) | 2,395 | $0.82 |
+| ctx-k20-header | 150 | 85.3 (79–91) | 83.3 (76–90) | 100.0 (100–100) | 8.3 (4–13) | 81.8 (73–90) | +34.0 (+25 to +44) | -2.0 (-6 to +2) | 4,562 | $1.48 |
+| ctx-k20-header-edges | 150 | 84.0 (78–89) | 81.8 (74–88) | 100.0 (100–100) | 9.8 (5–16) | 83.2 (75–91) | +32.7 (+23 to +43) | -3.3 (-8 to +1) | 4,562 | $1.47 |
+| ctx-k20-header-chronological | 150 | 86.0 (80–91) | 84.1 (78–90) | 100.0 (100–100) | 9.1 (6–13) | 78.3 (69–88) | +34.7 (+25 to +45) | -1.3 (-5 to +3) | 4,562 | $1.48 |
+| ctx-k20-header-merge | 150 | 87.3 (82–91) | 85.6 (79–91) | 100.0 (100–100) | 6.1 (3–10) | 79.8 (73–87) | +36.0 (+27 to +45) |  | 4,282 | $1.39 |
 
 **Answer correctness by question type**
 
@@ -199,6 +220,15 @@ Percentages with 95% intervals from redrawing evidence clusters. "vs baseline" i
 | guesser | 54.0 (42–66) | 34.4 (0–72) | 43.2 (32–59) | 100.0 (100–100) |
 | chunk-recursive-128-k25 | 33.3 (22–47) | 100.0 (100–100) | 35.1 (20–53) | 100.0 (100–100) |
 | retr-hybrid-rrf-top25 | 58.7 (45–74) | 100.0 (100–100) | 29.7 (16–44) | 100.0 (100–100) |
+| ctx-k5 | 39.7 (27–54) | 100.0 (100–100) | 16.2 (4–30) | 100.0 (100–100) |
+| ctx-k5-header | 66.7 (57–77) | 96.9 (93–100) | 45.9 (29–65) | 100.0 (100–100) |
+| ctx-k5-header-gold | 82.5 (71–93) | 100.0 (100–100) | 51.4 (35–66) | 100.0 (100–100) |
+| ctx-k3-header | 58.7 (49–70) | 96.9 (93–100) | 35.1 (17–53) | 100.0 (100–100) |
+| ctx-k10-header | 73.0 (63–84) | 100.0 (100–100) | 62.2 (44–77) | 100.0 (100–100) |
+| ctx-k20-header | 84.1 (75–93) | 96.9 (86–100) | 70.3 (53–82) | 100.0 (100–100) |
+| ctx-k20-header-edges | 84.1 (73–93) | 96.9 (86–100) | 64.9 (44–78) | 100.0 (100–100) |
+| ctx-k20-header-chronological | 82.5 (73–92) | 100.0 (100–100) | 73.0 (58–84) | 100.0 (100–100) |
+| ctx-k20-header-merge | 84.1 (75–92) | 100.0 (100–100) | 75.7 (60–88) | 100.0 (100–100) |
 <!-- results:end -->
 
 ## Data

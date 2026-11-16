@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="sans-serif" font-size="12">
+<rect width="640" height="400" fill="white"/>
+<text x="60" y="20" font-size="14">Answers against chunks in the prompt (150 development questions)</text>
+<line x1="60" y1="330.0" x2="600" y2="330.0" stroke="#ddd"/>
+<text x="52" y="334.0" text-anchor="end">0%</text>
+<line x1="60" y1="272.0" x2="600" y2="272.0" stroke="#ddd"/>
+<text x="52" y="276.0" text-anchor="end">20%</text>
+<line x1="60" y1="214.0" x2="600" y2="214.0" stroke="#ddd"/>
+<text x="52" y="218.0" text-anchor="end">40%</text>
+<line x1="60" y1="156.0" x2="600" y2="156.0" stroke="#ddd"/>
+<text x="52" y="160.0" text-anchor="end">60%</text>
+<line x1="60" y1="98.0" x2="600" y2="98.0" stroke="#ddd"/>
+<text x="52" y="102.0" text-anchor="end">80%</text>
+<line x1="60" y1="40.0" x2="600" y2="40.0" stroke="#ddd"/>
+<text x="52" y="44.0" text-anchor="end">100%</text>
+<polyline points="60.0,138.6 240.0,121.2 420.0,99.9 600.0,82.5" fill="none" stroke="#1f5fa8" stroke-width="2"/>
+<circle cx="60.0" cy="138.6" r="4" fill="#1f5fa8"/>
+<text x="67.0" y="131.6" fill="#1f5fa8">66</text>
+<circle cx="240.0" cy="121.2" r="4" fill="#1f5fa8"/>
+<text x="247.0" y="114.2" fill="#1f5fa8">72</text>
+<circle cx="420.0" cy="99.9" r="4" fill="#1f5fa8"/>
+<text x="427.0" y="92.9" fill="#1f5fa8">79</text>
+<circle cx="600.0" cy="82.5" r="4" fill="#1f5fa8"/>
+<text x="607.0" y="75.5" fill="#1f5fa8">85</text>
+<line x1="370" y1="283.6" x2="395" y2="283.6" stroke="#1f5fa8" stroke-width="2"/>
+<text x="402" y="287.6">answer correct</text>
+<polyline points="60.0,257.5 240.0,222.3 420.0,187.2 600.0,141.1" fill="none" stroke="#c0632b" stroke-width="2" stroke-dasharray="6 4"/>
+<circle cx="60.0" cy="257.5" r="4" fill="#c0632b"/>
+<text x="67.0" y="250.5" fill="#c0632b">25</text>
+<circle cx="240.0" cy="222.3" r="4" fill="#c0632b"/>
+<text x="247.0" y="215.3" fill="#c0632b">37</text>
+<circle cx="420.0" cy="187.2" r="4" fill="#c0632b"/>
+<text x="427.0" y="180.2" fill="#c0632b">49</text>
+<circle cx="600.0" cy="141.1" r="4" fill="#c0632b"/>
+<text x="607.0" y="134.1" fill="#c0632b">65</text>
+<line x1="370" y1="299.6" x2="395" y2="299.6" stroke="#c0632b" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="402" y="303.6">all gold sentences in the prompt</text>
+<polyline points="60.0,122.4 240.0,83.9 420.0,85.8 600.0,92.7" fill="none" stroke="#6a8f3a" stroke-width="2" stroke-dasharray="2 4"/>
+<circle cx="60.0" cy="122.4" r="4" fill="#6a8f3a"/>
+<text x="67.0" y="115.4" fill="#6a8f3a">72</text>
+<circle cx="240.0" cy="83.9" r="4" fill="#6a8f3a"/>
+<text x="247.0" y="76.9" fill="#6a8f3a">85</text>
+<circle cx="420.0" cy="85.8" r="4" fill="#6a8f3a"/>
+<text x="427.0" y="78.8" fill="#6a8f3a">84</text>
+<circle cx="600.0" cy="92.7" r="4" fill="#6a8f3a"/>
+<text x="607.0" y="85.7" fill="#6a8f3a">82</text>
+<line x1="370" y1="315.6" x2="395" y2="315.6" stroke="#6a8f3a" stroke-width="2" stroke-dasharray="2 4"/>
+<text x="402" y="319.6">faithful (judge unvalidated)</text>
+<circle cx="240.0" cy="173.4" r="4" fill="white" stroke="#1f5fa8" stroke-width="2"/>
+<text x="248.0" y="177.4" fill="#1f5fa8">54, no header</text>
+<line x1="60.0" y1="159.9" x2="60.0" y2="120.1" stroke="#1f5fa8"/>
+<text x="60.0" y="348" text-anchor="middle">3</text>
+<text x="60.0" y="362" text-anchor="middle" fill="#666">894 tok</text>
+<line x1="240.0" y1="139.9" x2="240.0" y2="102.3" stroke="#1f5fa8"/>
+<text x="240.0" y="348" text-anchor="middle">5</text>
+<text x="240.0" y="362" text-anchor="middle" fill="#666">1,316 tok</text>
+<line x1="420.0" y1="117.5" x2="420.0" y2="84.2" stroke="#1f5fa8"/>
+<text x="420.0" y="348" text-anchor="middle">10</text>
+<text x="420.0" y="362" text-anchor="middle" fill="#666">2,395 tok</text>
+<line x1="600.0" y1="100.5" x2="600.0" y2="66.8" stroke="#1f5fa8"/>
+<text x="600.0" y="348" text-anchor="middle">20</text>
+<text x="600.0" y="362" text-anchor="middle" fill="#666">4,562 tok</text>
+<text x="330.0" y="386" text-anchor="middle">chunks in the prompt, each with a title, source and date line; bars are 95% intervals over evidence clusters</text>
+</svg>

@@ -25,12 +25,8 @@ import yaml
 
 from ragbasics.cache import CachedGenerator, DiskCache
 from ragbasics.config import EvalConfig, PipelineConfig
-from ragbasics.context.prompts import (
-    CLOSED_BOOK_SYSTEM_PROMPT,
-    SYSTEM_PROMPT,
-    build_closed_book_prompt,
-    build_user_prompt,
-)
+from ragbasics.context.assemble import Assembly
+from ragbasics.context.prompts import build_prompt
 from ragbasics.costs import (
     CLAUDE_TOKENS_PER_CL100K,
     Meter,
@@ -52,7 +48,7 @@ from ragbasics.eval.stats import bootstrap_ci
 from ragbasics.generation.llm import Generator
 from ragbasics.pipeline import Pipeline
 from ragbasics.registry import build
-from ragbasics.types import Chunk, Question, Trace
+from ragbasics.types import Chunk, Passage, Question, Trace
 
 MODES = ("retrieved", "closed_book", "gold", "guesser")
 NULL_TYPE = "null_query"
@@ -85,8 +81,15 @@ def run_id(name: str, mode: str, sample: int) -> str:
     return "-".join(parts)
 
 
-def gold_context(question: Question, text_by_doc: dict[str, str]) -> list[Chunk]:
-    """The question's gold evidence sentences as passages, in their dataset order."""
+def gold_context(
+    question: Question,
+    text_by_doc: dict[str, str],
+    metadata_by_doc: dict[str, dict[str, Any]] | None = None,
+) -> list[Chunk]:
+    """The question's gold evidence sentences as passages, in their dataset order. With
+    `metadata_by_doc` each carries its article's title, source and date, so a config
+    with headers (Stage 8) can label them."""
+    metadata_by_doc = metadata_by_doc or {}
     return [
         Chunk(
             chunk_id=f"gold:{span.doc_id}:{span.start_char}",
@@ -94,9 +97,27 @@ def gold_context(question: Question, text_by_doc: dict[str, str]) -> list[Chunk]
             text=text_by_doc[span.doc_id][span.start_char : span.end_char],
             start_char=span.start_char,
             end_char=span.end_char,
+            metadata=metadata_by_doc.get(span.doc_id, {}),
         )
         for span in question.evidence
     ]
+
+
+def score_context(question: Question, assembly: Assembly) -> dict[str, float]:
+    """What the prompt itself holds (Stage 8): the share of the gold sentences in the
+    assembled passages, whether all of them are, and its size. Free: no model call."""
+    chunks = assembly.chunks
+    scores = {
+        "context_tokens": float(assembly.notes["tokens"]),
+        "context_passages": float(assembly.notes["passages"]),
+        "context_chunks": float(assembly.notes["chunks"]),
+    }
+    if question.evidence:
+        scores["context_recall"] = rm.evidence_recall(chunks, question.evidence, len(chunks))
+        scores["context_full_support"] = rm.full_support(
+            chunks, question.evidence, len(chunks)
+        )
+    return scores
 
 
 def score_retrieval(
@@ -347,6 +368,14 @@ def _run_eval(
             if embed_cost:
                 spend[pipeline.embedder.model] = [embed_tokens, 0, embed_cost]
             depth = eval_cfg.depth
+            pool = pipeline.assembler.pool
+            if pool > pipeline_cfg.top_k and pool > depth:
+                raise ValueError(
+                    f"Context assembly chooses from {pool} chunks, but the evaluator "
+                    f"retrieves {depth}."
+                )
+            assemblies = {q.question_id: pipeline.assemble(traces[q.question_id])
+                          for q in questions}
             for q in questions:
                 trace, row = traces[q.question_id], rows[q.question_id]
                 chunks = [c.chunk for c in trace.candidates]
@@ -388,6 +417,10 @@ def _run_eval(
                     row["scores"] |= score_retrieval(
                         q, chunks, total_relevant[q.question_id], eval_cfg, encoding
                     )
+                assembly = assemblies[q.question_id]
+                row["scores"] |= score_context(q, assembly)
+                row["passages"] = [[c.chunk_id for c in p.chunks] for p in assembly.passages]
+                row["assembly"] = assembly.notes
         answered = subset if answers else []
 
     # --- Answers, for the answer subset ----------------------------------------------------
@@ -399,16 +432,19 @@ def _run_eval(
         models["judge"] = judge_llm.model
 
         text_by_doc: dict[str, str] = {}
+        metadata_by_doc: dict[str, dict[str, Any]] = {}
         if mode == "gold":
-            text_by_doc = {d.doc_id: d.text for d in read_documents(eval_cfg.documents)}
+            documents = read_documents(eval_cfg.documents)
+            text_by_doc = {d.doc_id: d.text for d in documents}
+            metadata_by_doc = {d.doc_id: d.metadata for d in documents}
 
-        def context_for(q: Question) -> list[Chunk] | None:
+        def context_for(q: Question) -> list[Passage] | None:
             if mode == "closed_book":
                 return None
             if mode == "gold":
-                return gold_context(q, text_by_doc)
-            top = traces[q.question_id].candidates[: pipeline_cfg.top_k]
-            return [c.chunk for c in top]
+                # Only the header setting applies to gold evidence.
+                return pipeline.assembler.wrap(gold_context(q, text_by_doc, metadata_by_doc))
+            return assemblies[q.question_id].passages
 
         contexts = {q.question_id: context_for(q) for q in answered}
 
@@ -420,10 +456,7 @@ def _run_eval(
         gen_in = gen_calls = judge_in = 0
         for q in answered:
             context = contexts[q.question_id]
-            if context is None:
-                system, user = CLOSED_BOOK_SYSTEM_PROMPT, build_closed_book_prompt(q.text)
-            else:
-                system, user = SYSTEM_PROMPT, build_user_prompt(q.text, context)
+            system, user = build_prompt(q.text, context)
             if not generator.is_cached(system, user):
                 gen_calls += 1
                 gen_in += tokens(system) + tokens(user)
@@ -480,7 +513,7 @@ def _run_eval(
             # An answer that declines asserts nothing, so there is nothing to support.
             faithful = None
             if trace.context and not is_abstention(trace.answer):
-                faithful = judge_faithfulness(judge_llm, q.text, trace.answer, trace.context)
+                faithful = judge_faithfulness(judge_llm, q.text, trace.answer, trace.passages)
             return correct, faithful
 
         def bill_judge(g: Any) -> None:
@@ -507,7 +540,11 @@ def _run_eval(
                     row["scores"]["faithful"] = float(faithful.passed)
 
     # --- Scores derived from the answer ------------------------------------------------------
-    top_k_support = f"full_support@{pipeline_cfg.top_k}"
+    # Whether the prompt held every gold sentence: read from the assembled context
+    # (Stage 8), or for older runs from the top `top_k` of the ranking.
+    top_k_support = (
+        "context_full_support" if mode == "retrieved" else f"full_support@{pipeline_cfg.top_k}"
+    )
     for q in answered:
         row = rows[q.question_id]
         scores = row["scores"]

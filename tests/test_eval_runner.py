@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ragbasics.config import EvalConfig, PipelineConfig, load_config
+from ragbasics.config import ComponentSpec, EvalConfig, PipelineConfig, load_config
 from ragbasics.eval import report
 from ragbasics.eval.dataset import write_jsonl
 from ragbasics.eval.runner import (
@@ -365,3 +365,82 @@ def test_a_hybrid_run_records_each_retrievers_list(setup):
         pipeline_cfg, eval_cfg, answers=False, runs_dir=tmp_path / "runs2", log=lambda _: None
     ))
     assert "by_retriever" not in rows["q1"]
+
+
+# --- Context assembly (Stage 8) ---------------------------------------------------------
+
+
+@register("generator", "recording")
+class RecordingGenerator:
+    """Declines everything and keeps every prompt it was sent."""
+
+    model = "recording"
+    prompts: list[tuple[str, str]] = []
+
+    def generate(self, system: str, user: str) -> Generation:
+        RecordingGenerator.prompts.append((system, user))
+        return Generation("Insufficient information.", 100, 5, stop_reason="end_turn")
+
+
+def with_context(cfg: PipelineConfig, **params) -> PipelineConfig:
+    return cfg.model_copy(
+        update={
+            "context": ComponentSpec(name="assembler", params=params),
+            "generator": ComponentSpec(name="recording"),
+        }
+    )
+
+
+def test_retrieval_only_scores_the_assembled_context(setup):
+    run, tmp_path, *_ = setup
+    lines = open(run(answers=False) / "questions.jsonl")
+    rows = {r["question_id"]: r for r in map(json.loads, lines)}
+    q2 = rows["q2"]
+    # top_k 2 of a two-sentence question: the context scores read the prompt's chunks.
+    assert q2["scores"]["context_chunks"] == 2.0
+    assert q2["scores"]["context_recall"] == q2["scores"]["recall@2"]
+    assert q2["scores"]["context_full_support"] == q2["scores"]["full_support@2"]
+    assert q2["scores"]["context_tokens"] > 0
+    assert len(q2["passages"]) == 2 and q2["assembly"]["order"] == "rank"
+    assert "context_recall" not in rows["q4"]["scores"]  # no gold evidence to find
+
+
+def test_gold_run_with_headers_labels_each_sentence_with_its_article(setup):
+    run, tmp_path, pipeline_cfg, eval_cfg = setup
+    labelled = [Document(d.doc_id, d.text, {"title": f"Story {d.doc_id}", "source": "Wire",
+                                             "published_at": "2023-10-07"}) for d in DOCS]
+    write_jsonl(tmp_path / "documents.jsonl", labelled)
+    RecordingGenerator.prompts.clear()
+    run_eval(with_context(pipeline_cfg, header=True), eval_cfg, mode="gold",
+             runs_dir=tmp_path / "runs", log=lambda _: None, judge=StubJudge())
+    users = [user for _, user in RecordingGenerator.prompts]
+    q2 = next(u for u in users if "bakery" in u)
+    assert "Story doc_b. Wire, October 7, 2023.\nrose nine percent" in q2
+    # The header sentence is in the system prompt wherever there is a labelled passage.
+    assert all("Each passage starts with a line" in system
+               for system, user in RecordingGenerator.prompts if '<passage id="1">' in user)
+
+
+def test_a_retrieved_run_sends_the_assembled_passages_and_judges_them(setup):
+    run, tmp_path, pipeline_cfg, eval_cfg = setup
+    judge = StubJudge()
+    RecordingGenerator.prompts.clear()
+    out = run_eval(with_context(pipeline_cfg, header=True, order="edges"), eval_cfg,
+                   runs_dir=tmp_path / "runs", log=lambda _: None, judge=judge)
+    rows = [json.loads(line) for line in open(out / "questions.jsonl")]
+    answered = [r for r in rows if r["answer_subset"]]
+    assert len(RecordingGenerator.prompts) == len(answered)
+    assert all(r["assembly"]["order"] == "edges" for r in rows)
+    # Everything declined: nothing asserted, so faithfulness is never asked.
+    assert all("faithful" not in r["scores"] for r in answered)
+    # The false-abstention split reads the context's own full support.
+    for r in answered:
+        if r["question_type"] != "null_query":
+            supported = r["scores"]["context_full_support"] == 1.0
+            assert r["scores"]["false_abstain_with_support"] == float(supported)
+
+
+def test_gold_context_carries_document_metadata():
+    meta = {"doc_b": {"source": "Wire"}}
+    context = gold_context(QUESTIONS[1], {d.doc_id: d.text for d in DOCS}, meta)
+    assert [c.metadata for c in context] == [{"source": "Wire"}, {}]

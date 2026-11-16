@@ -61,7 +61,12 @@ class PipelineConfig(StrictModel):
     # In a chat, rewrites a message that leans on earlier turns into a question that
     # stands on its own (Stage 7). None means every message is taken as it is.
     followup: ComponentSpec | None = None
+    # Chunks in the prompt.
     top_k: int = Field(gt=0)
+    # How the ranked chunks become the prompt's passages (Stage 8): deduplication,
+    # diversity selection, merging neighbours, headers, a token budget and the order.
+    # None means the top `top_k` chunks in rank order with no header, as before.
+    context: ComponentSpec | None = None
     # Search this many times deeper than asked, before chunks that return the same text
     # are collapsed into one. Parent-child chunking needs it; flat chunking leaves it at 1.
     overfetch: int = Field(default=1, gt=0)

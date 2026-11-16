@@ -16,6 +16,12 @@ BASELINE_RUN = "baseline"
 # The best configuration so far: the run each stage changes one variable against.
 # Updated when a stage records a new best config.
 BEST_RUN = "rerank-qwen3-100"
+# The same for answers: the answer run each stage changes one variable against. Stage 8
+# chose it: 20 chunks with headers, duplicates dropped and neighbours merged.
+BEST_ANSWER_RUN = "ctx-k20-header-merge"
+# Runs that change only context assembly (Stage 8) retrieve exactly what an earlier run
+# retrieved, so they are left out of the retrieval table to keep it free of copies.
+RETRIEVAL_SKIP_PREFIXES = ("ctx-",)
 
 # (metric key, column heading). Shares are shown as percentages.
 RETRIEVAL_COLUMNS = [
@@ -115,6 +121,12 @@ def _versus(run: dict[str, Any], baseline: dict[str, Any] | None, metric: str, d
     return _signed(compare(run, baseline, metric), digits)
 
 
+def _tokens_in_prompt(run: dict[str, Any]) -> float:
+    """Mean generator input tokens per answered question, as billed (Claude's count)."""
+    used = [row["usage"]["input_tokens"] for row in run["rows"] if row.get("usage")]
+    return sum(used) / len(used) if used else 0.0
+
+
 def _markdown(header: list[str], rows: list[list[str]]) -> str:
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     lines += ["| " + " | ".join(row) + " |" for row in rows]
@@ -126,7 +138,12 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
     baseline = next((run for run in runs if run["run_id"] == BASELINE_RUN), None)
     best = next((run for run in runs if run["run_id"] == BEST_RUN), None)
     # A repeat (sample > 0) redraws only the answers; its retrieval is the same run's.
-    retrieval = [run for run in runs if "recall@5" in run["metrics"] and not run["sample"]]
+    retrieval = [
+        run for run in runs
+        if "recall@5" in run["metrics"] and not run["sample"]
+        and not run["run_id"].startswith(RETRIEVAL_SKIP_PREFIXES)
+    ]
+    best_answer = next((run for run in runs if run["run_id"] == BEST_ANSWER_RUN), None)
     answered = [run for run in runs if "correct" in run["metrics"]]
     parts = [
         "Percentages with 95% intervals from redrawing evidence clusters. "
@@ -137,6 +154,13 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
         parts[0] += (
             f" \"vs best so far\" is the same difference against `{BEST_RUN}`, the "
             "configuration the current stage changes one variable in."
+        )
+    if best_answer:
+        parts[0] += (
+            f" For answers it is against `{BEST_ANSWER_RUN}`. \"prompt tokens\" is the "
+            "generator's mean input per question, as billed. Runs named `ctx-` change only "
+            "how the retrieved chunks are assembled into the prompt, so they appear in the "
+            "answer tables only."
         )
     if retrieval:
         n = retrieval[0]["metrics"]["recall@5"]["n"]
@@ -169,12 +193,15 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
         for run in answered:
             delta = _versus(run, baseline, "correct", 0)
             cost = run["cost_usd"]["list_price"]
+            tokens = _tokens_in_prompt(run)
             rows.append(
                 [
                     run["run_id"],
                     str(run["metrics"]["correct"]["n"]),
                     *[_pct(run["metrics"].get(key)) for key, _ in ANSWER_COLUMNS],
                     delta,
+                    *([_versus(run, best_answer, "correct", 0)] if best_answer else []),
+                    f"{tokens:,.0f}" if tokens else "",
                     f"${cost:.2f}" if cost else "",
                 ]
             )
@@ -183,6 +210,7 @@ def results_markdown(runs: list[dict[str, Any]]) -> str:
             "**Answers**",
             _markdown(
                 ["run", "n", *[heading for _, heading in ANSWER_COLUMNS], "correct vs baseline",
+                 *(["correct vs best so far"] if best_answer else []), "prompt tokens",
                  "cost"],
                 rows,
             ),

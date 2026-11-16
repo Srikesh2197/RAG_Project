@@ -87,6 +87,32 @@ def format_queries(trace: Trace) -> list[str]:
     return [*lines, ""]
 
 
+def format_passages(trace: Trace) -> list[str]:
+    """The passages pasted into the prompt (Stage 8), when assembly did anything more
+    than take the top chunks in rank order: merged neighbours, headers, another order,
+    duplicates or diversity."""
+    notes = trace.assembly
+    plain = all(len(p.chunks) == 1 and not p.header for p in trace.passages) and (
+        notes.get("order", "rank") == "rank"
+        and not notes.get("duplicates") and not notes.get("mmr_swapped")
+    )
+    if not trace.passages or plain:
+        return []
+    done = ", ".join(
+        f"{key.replace('_', ' ')} {notes[key]}"
+        for key in ("duplicates", "mmr_swapped", "merged", "over_budget")
+        if notes.get(key)
+    )
+    lines = ["", f"Prompt: {notes.get('passages')} passages from {notes.get('chunks')} chunks, "
+             f"{notes.get('order')} order, {notes.get('tokens')} tokens"
+             + (f" ({done})" if done else "") + ":"]
+    for i, passage in enumerate(trace.passages, start=1):
+        ids = " + ".join(c.chunk_id for c in passage.chunks)
+        lines.append(f"  [{i}] rank {passage.rank}  {ids}"
+                     + (f"  {passage.header}" if passage.header else ""))
+    return lines
+
+
 def format_trace(trace: Trace) -> str:
     title = "Retrieved chunks:"
     if trace.rerank:
@@ -109,6 +135,7 @@ def format_trace(trace: Trace) -> str:
             f"[{chunk.start_char}:{chunk.end_char}]  {source_label(chunk.metadata)}"
             + (f"  ({notes})" if notes else "")
         )
+    lines += format_passages(trace)
     timings = ", ".join(f"{step} {s * 1000:.0f} ms" for step, s in trace.timings.items())
     lines += ["", f"Time: {timings}", f"Tokens: {trace.usage}  Cost: ${trace.cost_usd:.4f}"]
     return "\n".join(lines)
@@ -197,14 +224,18 @@ def cmd_check(args: argparse.Namespace) -> None:
         print(f"{key}: {'set' if os.environ.get(key) else 'MISSING'}")
 
     if os.environ.get("OPENAI_API_KEY"):
+        from openai import AuthenticationError as OpenAIAuthError
         from openai import OpenAI
 
-        client = OpenAI()
-        ids = sorted(model.id for model in client.models.list())
-        embedder = cfg.embedder.params.get("model", "")
-        print(f"OpenAI embedder '{embedder}': {'found' if embedder in ids else 'NOT FOUND'}")
-        # The judge (configs/eval.yaml) is picked from these.
-        print("OpenAI gpt models:", ", ".join(i for i in ids if i.startswith("gpt")))
+        try:
+            ids = sorted(model.id for model in OpenAI().models.list())
+        except OpenAIAuthError as error:
+            print(f"OPENAI_API_KEY rejected: {error.message}")
+        else:
+            embedder = cfg.embedder.params.get("model", "")
+            print(f"OpenAI embedder '{embedder}': {'found' if embedder in ids else 'NOT FOUND'}")
+            # The judge (configs/eval.yaml) is picked from these.
+            print("OpenAI gpt models:", ", ".join(i for i in ids if i.startswith("gpt")))
 
     if os.environ.get("ANTHROPIC_API_KEY"):
         import anthropic
@@ -215,6 +246,8 @@ def cmd_check(args: argparse.Namespace) -> None:
             print(f"Anthropic generator '{generator}': found ({model.display_name})")
         except anthropic.NotFoundError:
             print(f"Anthropic generator '{generator}': NOT FOUND")
+        except anthropic.AuthenticationError as error:
+            print(f"ANTHROPIC_API_KEY rejected: {error.message}")
 
 
 def cmd_eval(args: argparse.Namespace) -> None:

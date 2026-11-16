@@ -14,10 +14,12 @@ sample of human labels, and on every answer the string comparison already settle
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ragbasics.context.prompts import render_passages
 from ragbasics.generation.llm import Generation, Generator
-from ragbasics.types import Chunk
+from ragbasics.types import Chunk, Passage
 
 CORRECTNESS_SYSTEM = """\
 You grade answers to questions about news articles. You are given a question, the \
@@ -76,12 +78,12 @@ def correctness_prompt(question: str, reference: str, answer: str) -> str:
     )
 
 
-def faithfulness_prompt(question: str, answer: str, context: list[Chunk]) -> str:
-    passages = "\n\n".join(
-        f'<passage id="{i}">\n{chunk.text.strip()}\n</passage>'
-        for i, chunk in enumerate(context, start=1)
-    )
-    return f"<passages>\n{passages}\n</passages>\n\nQuestion: {question}\n\nAnswer: {answer}"
+def faithfulness_prompt(
+    question: str, answer: str, context: Sequence[Chunk | Passage]
+) -> str:
+    """The passages exactly as the generator saw them (headers included, Stage 8), then
+    the question and the answer."""
+    return f"{render_passages(context)}\n\nQuestion: {question}\n\nAnswer: {answer}"
 
 
 def judge_correctness(llm: Generator, question: str, reference: str, answer: str) -> Verdict:
@@ -90,7 +92,9 @@ def judge_correctness(llm: Generator, question: str, reference: str, answer: str
     return Verdict(passed, reasoning, generation)
 
 
-def judge_faithfulness(llm: Generator, question: str, answer: str, context: list[Chunk]) -> Verdict:
+def judge_faithfulness(
+    llm: Generator, question: str, answer: str, context: Sequence[Chunk | Passage]
+) -> Verdict:
     generation = llm.generate(FAITHFULNESS_SYSTEM, faithfulness_prompt(question, answer, context))
     passed, reasoning = parse_verdict(generation.text, "supported", "unsupported")
     return Verdict(passed, reasoning, generation)

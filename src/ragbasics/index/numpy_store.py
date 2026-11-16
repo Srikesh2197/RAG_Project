@@ -29,6 +29,7 @@ class NumpyStore:
     def __init__(self) -> None:
         self.vectors: np.ndarray | None = None  # (number of chunks, dimensions), unit rows
         self.chunks: list[Chunk] = []
+        self._row: dict[str, int] | None = None  # chunk id -> row, built on first lookup
 
     def __len__(self) -> int:
         return len(self.chunks)
@@ -66,6 +67,14 @@ class NumpyStore:
             Candidate(chunk=self.chunks[i], score=float(scores[i]), rank=rank)
             for rank, i in enumerate(order, start=1)
         ]
+
+    def vectors_for(self, chunks: list[Chunk]) -> np.ndarray:
+        """The stored unit vectors of `chunks`, one row each, looked up by chunk id.
+        Context assembly (Stage 8) uses them to measure how alike two chunks are."""
+        if self._row is None or len(self._row) != len(self.chunks):
+            self._row = {chunk.chunk_id: i for i, chunk in enumerate(self.chunks)}
+        assert self.vectors is not None
+        return self.vectors[[self._row[chunk.chunk_id] for chunk in chunks]]
 
     def save(self, directory: Path, meta: dict[str, Any]) -> None:
         """Write vectors.npy, chunks.jsonl and meta.json (what built this index)."""
